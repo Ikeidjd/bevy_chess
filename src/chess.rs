@@ -1,6 +1,6 @@
 use std::ops::{Add, AddAssign, Index, IndexMut, Mul, Sub};
 
-use bevy::{ecs::query::QueryFilter, math::{USizeVec2, usizevec2}, platform::collections::HashSet, prelude::*};
+use bevy::{ecs::query::QueryFilter, math::{USizeVec2, usizevec2}, platform::collections::{HashMap, HashSet}, prelude::*};
 
 use crate::CursorWorldCoordinates;
 
@@ -19,6 +19,7 @@ impl Plugin for ChessPlugin {
             .add_observer(on_piece_selected)
             .add_observer(generate_single_moves)
             .add_observer(generate_sliding_moves)
+            .add_observer(generate_castling_moves)
             .add_observer(on_piece_moved);
     }
 }
@@ -130,6 +131,14 @@ impl Add<Direction> for Position {
     }
 }
 
+impl Sub for Position {
+    type Output = Direction;
+
+    fn sub(self, other: Self) -> Self::Output {
+        Direction::new(self.rank - other.rank, self.file - other.file)
+    }
+}
+
 impl AddAssign<Direction> for Position {
     fn add_assign(&mut self, other: Direction) {
         self.rank += other.drank;
@@ -137,7 +146,7 @@ impl AddAssign<Direction> for Position {
     }
 }
 
-#[derive(Reflect, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
 struct Direction {
     drank: isize,
     dfile: isize,
@@ -158,6 +167,10 @@ impl Direction {
             drank,
             dfile,
         }
+    }
+
+    fn normalize(&self) -> Self {
+        Self::new(self.drank.signum(), self.dfile.signum())
     }
 }
 
@@ -187,13 +200,15 @@ impl Mul<isize> for Direction {
 
 #[derive(Component, Default)]
 struct Moves {
-    positions: HashSet<Position>,
+    positions: HashMap<Position, Move>,
     black_circles: Vec<Entity>,
 }
 
 impl Moves {
-    fn insert(&mut self, commands: &mut Commands, position: Position) {
-        if self.positions.insert(position) {
+    fn insert(&mut self, commands: &mut Commands, position: Position, mmove: Move) {
+        if !self.positions.contains_key(&position) {
+            self.positions.insert(position, mmove);
+
             self.black_circles.push(commands.spawn((
                 BlackCircle,
                 position,
@@ -202,11 +217,26 @@ impl Moves {
     }
 }
 
+#[derive(Clone, Copy)]
+struct NormalMove(Position, Position);
+
+#[derive(Clone, Copy)]
+enum Move {
+    Normal(NormalMove),
+    Castle(NormalMove, NormalMove),
+}
+
 #[derive(Component, Clone)]
 struct SingleMoveGenerator(HashSet<Direction>);
 
 #[derive(Component, Clone)]
 struct SlidingMoveGenerator(HashSet<Direction>);
+
+#[derive(Component)]
+struct CastleTop;
+
+#[derive(Component)]
+struct CastleBottom;
 
 #[derive(Event)]
 struct BoardPressedEvent(Position);
@@ -223,8 +253,8 @@ struct PieceDeselectedEvent;
 #[derive(Event)]
 struct GenerateMovesEvent;
 
-#[derive(Event)]
-struct PieceMovedEvent(Position, Position);
+#[derive(Event, Clone)]
+struct PieceMovedEvent(Move);
 
 fn check_board_clicked(mut commands: Commands, input: Res<ButtonInput<MouseButton>>, cursor: Res<CursorWorldCoordinates>) {
     let cursor = Position::from_translation(cursor.0);
@@ -237,7 +267,7 @@ fn check_board_clicked(mut commands: Commands, input: Res<ButtonInput<MouseButto
 }
 
 fn on_board_pressed(event: On<BoardPressedEvent>, mut commands: Commands, board: Single<&Board>, selected_piece: Query<&Moves, With<Piece>>) {
-    if let Ok(moves) = selected_piece.single() && moves.positions.contains(&event.0) {
+    if let Ok(moves) = selected_piece.single() && moves.positions.contains_key(&event.0) {
         return;
     }
 
@@ -247,13 +277,13 @@ fn on_board_pressed(event: On<BoardPressedEvent>, mut commands: Commands, board:
     }
 }
 
-fn on_board_released(event: On<BoardReleasedEvent>, mut commands: Commands, board: Single<&Board>, selected_piece: Query<(Entity, &Position, &Moves), With<Piece>>) {
-    if board.is_in_bounds(event.0) && let Ok((selected_piece_entity, &selected_piece_position, moves)) = selected_piece.single() {
-        match moves.positions.contains(&event.0) {
-            true => {
-                commands.trigger(PieceMovedEvent(selected_piece_position, event.0));
+fn on_board_released(event: On<BoardReleasedEvent>, mut commands: Commands, board: Single<&Board>, selected_piece: Query<(Entity, &Moves), With<Piece>>) {
+    if board.is_in_bounds(event.0) && let Ok((selected_piece_entity, moves)) = selected_piece.single() {
+        match moves.positions.get(&event.0) {
+            Some(&mmove) => {
+                commands.trigger(PieceMovedEvent(mmove));
             }
-            false => {
+            None => {
                 commands.entity(selected_piece_entity).remove::<PieceFollowsCursor>();
             }
         }
@@ -302,7 +332,7 @@ fn generate_single_moves(_event: On<GenerateMovesEvent>, mut commands: Commands,
         let pos = position + dir;
 
         if board.is_empty(pos) || board.is_enemy(pos, color, piece_colors) {
-            moves.insert(&mut commands, pos);
+            moves.insert(&mut commands, pos, Move::Normal(NormalMove(position, pos)));
         }
     }
 }
@@ -317,12 +347,36 @@ fn generate_sliding_moves(_event: On<GenerateMovesEvent>, mut commands: Commands
         let mut pos = position + dir;
 
         while board.is_empty(pos) {
-            moves.insert(&mut commands, pos);
+            moves.insert(&mut commands, pos, Move::Normal(NormalMove(position, pos)));
             pos += dir;
         }
 
         if board.is_enemy(pos, color, piece_colors) {
-            moves.insert(&mut commands, pos);
+            moves.insert(&mut commands, pos, Move::Normal(NormalMove(position, pos)));
+        }
+    }
+}
+
+fn generate_castling_moves(_event: On<GenerateMovesEvent>, mut commands: Commands, board: Single<&Board>,
+    mut castle_top: Single<(&PieceColor, &Position, &mut Moves), (With<Piece>, With<SelectedPiece>, With<CastleTop>)>,
+    castle_bottoms: Query<(Entity, &PieceColor, &Position), With<CastleBottom>>) {
+
+    let (color, &position, ref mut moves) = *castle_top;
+
+    for (bottom, bottom_color, &bottom_position) in castle_bottoms {
+        if color != bottom_color {
+            continue;
+        }
+
+        let dir = (bottom_position - position).normalize();
+        let mut pos = position + dir;
+
+        while board.is_empty(pos) {
+            pos += dir;
+        }
+
+        if board.is_in_bounds(pos) && board[pos] == bottom {
+            moves.insert(&mut commands, position + dir * 2, Move::Castle(NormalMove(position, position + dir * 2), NormalMove(bottom_position, position + dir)));
         }
     }
 }
@@ -330,17 +384,25 @@ fn generate_sliding_moves(_event: On<GenerateMovesEvent>, mut commands: Commands
 fn on_piece_moved(event: On<PieceMovedEvent>, mut commands: Commands, mut board: Single<&mut Board>, mut pieces: Query<(Entity, &mut Position), With<Piece>>) {
     commands.trigger(PieceDeselectedEvent);
 
-    let PieceMovedEvent(from, to) = *event;
-    let (piece, mut piece_position) = pieces.get_mut(board[from]).unwrap();
+    match event.0 {
+        Move::Normal(NormalMove(from, to)) => {
+            let (piece, mut piece_position) = pieces.get_mut(board[from]).unwrap();
 
-    if !board.is_empty(to) {
-        commands.entity(board[to]).despawn();
+            if !board.is_empty(to) {
+                commands.entity(board[to]).despawn();
+            }
+
+            board[from] = board.empty_piece;
+            board[to] = piece;
+
+            commands.entity(piece).remove::<(CastleTop, CastleBottom)>();
+            *piece_position = to;
+        }
+        Move::Castle(normal_move_a, normal_move_b) => {
+            commands.trigger(PieceMovedEvent(Move::Normal(normal_move_a)));
+            commands.trigger(PieceMovedEvent(Move::Normal(normal_move_b)));
+        }
     }
-
-    board[from] = board.empty_piece;
-    board[to] = piece;
-
-    *piece_position = to;
 }
 
 fn sync_transform_with_position(mut entities: Query<(&Position, &mut Transform), Without<PieceFollowsCursor>>) {
@@ -388,16 +450,7 @@ fn spawn_board(mut commands: Commands, asset_server: Res<AssetServer>) {
         Direction::SOUTH_WEST,
     ]);
 
-    let monarch = HashSet::from([
-        Direction::NORTH,
-        Direction::SOUTH,
-        Direction::EAST,
-        Direction::WEST,
-        Direction::NORTH_EAST,
-        Direction::NORTH_WEST,
-        Direction::SOUTH_EAST,
-        Direction::SOUTH_WEST,
-    ]);
+    let monarch: HashSet<_> = orthogonal.union(&diagonal).map(|&direction| direction).collect();
 
     let mut knight = HashSet::new();
 
@@ -406,23 +459,35 @@ fn spawn_board(mut commands: Commands, asset_server: Res<AssetServer>) {
         knight.insert(dir * 2 - Direction::new(dir.dfile, dir.drank));
     }
 
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 0 as isize), "white/rook.png", SlidingMoveGenerator(orthogonal.clone())));
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 1 as isize), "white/knight.png", SingleMoveGenerator(knight.clone())));
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 2 as isize), "white/bishop.png", SlidingMoveGenerator(diagonal.clone())));
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 3 as isize), "white/queen.png", SlidingMoveGenerator(monarch.clone())));
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 4 as isize), "white/king.png", SingleMoveGenerator(monarch.clone())));
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 5 as isize), "white/bishop.png", SlidingMoveGenerator(diagonal.clone())));
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 6 as isize), "white/knight.png", SingleMoveGenerator(knight.clone())));
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 7 as isize), "white/rook.png", SlidingMoveGenerator(orthogonal.clone())));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 0 as isize), "white/rook.png", (
+        SlidingMoveGenerator(orthogonal.clone()),
+        CastleBottom,
+    )));
 
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 0 as isize), "black/rook.png", SlidingMoveGenerator(orthogonal.clone())));
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 1 as isize), "black/knight.png", SingleMoveGenerator(knight.clone())));
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 2 as isize), "black/bishop.png", SlidingMoveGenerator(diagonal.clone())));
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 3 as isize), "black/queen.png", SlidingMoveGenerator(monarch.clone())));
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 4 as isize), "black/king.png", SingleMoveGenerator(monarch.clone())));
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 5 as isize), "black/bishop.png", SlidingMoveGenerator(diagonal.clone())));
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 6 as isize), "black/knight.png", SingleMoveGenerator(knight.clone())));
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 7 as isize), "black/rook.png", SlidingMoveGenerator(orthogonal.clone())));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 7 as isize), "white/rook.png", (
+        SlidingMoveGenerator(orthogonal.clone()),
+        CastleBottom,
+    )));
+
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 0 as isize), "black/rook.png", (
+        SlidingMoveGenerator(orthogonal.clone()),
+        CastleBottom,
+    )));
+    
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 7 as isize), "black/rook.png", (
+        SlidingMoveGenerator(orthogonal.clone()),
+        CastleBottom,
+    )));
+
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 4 as isize), "white/king.png", (
+        SingleMoveGenerator(monarch.clone()),
+        CastleTop,
+    )));
+
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 4 as isize), "black/king.png", (
+        SingleMoveGenerator(monarch.clone()),
+        CastleTop,
+    )));
 
     commands.spawn((
         Board::new(empty_piece),
