@@ -1,6 +1,6 @@
-use std::ops::{Add, Index, IndexMut};
+use std::ops::{Add, AddAssign, Index, IndexMut};
 
-use bevy::{math::{USizeVec2, usizevec2}, platform::collections::HashSet, prelude::*};
+use bevy::{ecs::reflect::ReflectCommandExt, math::{USizeVec2, usizevec2}, platform::collections::HashSet, prelude::*};
 
 use crate::CursorWorldCoordinates;
 
@@ -13,9 +13,13 @@ pub struct ChessPlugin;
 impl Plugin for ChessPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, (spawn_board, sync_pieces_with_board).chain())
-            .add_systems(Update, (check_board_clicked, sync_transform_with_position, piece_follow_cursor))
-            .add_observer(on_board_clicked)
-            .add_observer(on_piece_selected);
+            .add_systems(Update, (check_board_clicked, (sync_transform_with_position, piece_follow_cursor)).chain())
+            .add_observer(on_board_pressed)
+            .add_observer(on_board_released)
+            .add_observer(on_piece_deselected)
+            .add_observer(on_piece_selected)
+            .add_observer(on_generate_moves)
+            .add_observer(on_piece_moved);
     }
 }
 
@@ -33,8 +37,12 @@ impl Board {
         }
     }
 
-    fn in_bounds(&self, position: Position) -> bool {
+    fn is_in_bounds(&self, position: Position) -> bool {
         position.rank >= 0 && position.rank < BOARD_LENGTH.x as isize && position.file >= 0 && position.file < BOARD_LENGTH.y as isize
+    }
+
+    fn is_empty(&self, position: Position) -> bool {
+        self[position] == self.empty_piece
     }
 }
 
@@ -55,21 +63,30 @@ impl IndexMut<Position> for Board {
 #[derive(Component)]
 struct Piece;
 
+#[derive(Component, PartialEq, Eq, Clone, Copy)]
+enum PieceColor {
+    White,
+    Black,
+}
+
 #[derive(Component)]
 struct SelectedPiece { yellow_square: Entity }
 
 #[derive(Component)]
 struct EmptyPiece;
 
-// If I don't put the starting transform off-screen, it appears in the center of the board for one frame, which looks very bad
 #[derive(Component)]
-#[require(Sprite::from_color(Color::srgba(1.0, 1.0, 0.0, 0.5), vec2(PIECE_SIZE, PIECE_SIZE)), Transform::from_xyz(-1000.0, -1000.0, 0.5))]
+#[require(Sprite::from_color(Color::srgba(1.0, 1.0, 0.0, 0.5), vec2(PIECE_SIZE, PIECE_SIZE)))]
 struct YellowSquare;
+
+#[derive(Component)]
+#[require(Sprite::from_color(Color::BLACK.with_alpha(0.75), vec2(PIECE_SIZE, PIECE_SIZE)))]
+struct BlackCircle;
 
 #[derive(Component)]
 struct PieceFollowsCursor;
 
-#[derive(Component, Debug, Clone, Copy)]
+#[derive(Component, Debug, PartialEq, Eq, Hash, Clone, Copy)]
 #[require(Transform)]
 struct Position {
     rank: isize,
@@ -106,6 +123,14 @@ impl Add<Direction> for Position {
     }
 }
 
+impl AddAssign<Direction> for Position {
+    fn add_assign(&mut self, other: Direction) {
+        self.rank += other.drank;
+        self.file += other.dfile;
+    }
+}
+
+#[derive(Reflect, PartialEq, Eq, Hash, Clone, Copy)]
 struct Direction {
     drank: isize,
     dfile: isize,
@@ -137,50 +162,89 @@ impl Add for Direction {
     }
 }
 
-#[derive(Component)]
-struct SlidingPiece(HashSet<Direction>);
+#[derive(Component, Default)]
+struct Moves {
+    positions: HashSet<Position>,
+    black_circles: Vec<Entity>,
+}
+
+impl Moves {
+    fn insert(&mut self, commands: &mut Commands, position: Position) {
+        if self.positions.insert(position) {
+            self.black_circles.push(commands.spawn((
+                BlackCircle,
+                position,
+            )).id());
+        }
+    }
+}
+
+#[derive(Component, Reflect, Clone)]
+#[reflect(Component)]
+struct SlidingMoveGenerator(HashSet<Direction>);
 
 #[derive(Event)]
-struct BoardClickedEvent(Position);
+struct BoardPressedEvent(Position);
+
+#[derive(Event)]
+struct BoardReleasedEvent(Position);
 
 #[derive(Event)]
 struct PieceSelectedEvent(Entity);
 
-fn check_board_clicked(mut commands: Commands, input: Res<ButtonInput<MouseButton>>, cursor: Res<CursorWorldCoordinates>, piece_follows_cursor: Query<Entity, With<PieceFollowsCursor>>) {
+#[derive(Event)]
+struct PieceDeselectedEvent;
+
+#[derive(Event)]
+struct GenerateMovesEvent;
+
+#[derive(Event)]
+struct PieceMovedEvent(Position, Position);
+
+fn check_board_clicked(mut commands: Commands, input: Res<ButtonInput<MouseButton>>, cursor: Res<CursorWorldCoordinates>) {
+    let cursor = Position::from_translation(cursor.0);
+
     if input.just_pressed(MouseButton::Left) {
-        let cursor = Position::from_translation(cursor.0);
-        println!("{:?}", cursor);
-        commands.trigger(BoardClickedEvent(cursor));
-    } else if input.just_released(MouseButton::Left) && let Ok(piece) = piece_follows_cursor.single() {
-        commands.entity(piece).remove::<PieceFollowsCursor>();
+        commands.trigger(BoardPressedEvent(cursor));
+    } else if input.just_released(MouseButton::Left) {
+        commands.trigger(BoardReleasedEvent(cursor));
     }
 }
 
-fn on_board_clicked(event: On<BoardClickedEvent>, mut commands: Commands, board: Single<&Board>,
-    selected_piece: Query<(Entity, &Position, &SelectedPiece), (With<Piece>, With<SelectedPiece>)>, empty_piece: Single<Entity, With<EmptyPiece>>) {
-
-    if !board.in_bounds(event.0) {
+fn on_board_pressed(event: On<BoardPressedEvent>, mut commands: Commands, board: Single<&Board>, selected_piece: Query<&Moves, With<Piece>>) {
+    if let Ok(moves) = selected_piece.single() && moves.positions.contains(&event.0) {
         return;
     }
 
-    let next_selected = board[event.0];
+    if board.is_in_bounds(event.0) {
+        commands.trigger(PieceDeselectedEvent);
+        commands.trigger(PieceSelectedEvent(board[event.0]));
+    }
+}
 
-    if let Ok((selected_piece_entity, selected_piece_position, selected_piece)) = selected_piece.single() {
-        // The yellow square disappears for one frame when reselecting, so we simply don't reselect, but we do make the piece follow the cursor again
-        if next_selected == selected_piece_entity {
-            commands.entity(selected_piece_entity).insert(PieceFollowsCursor);
-            return;
+fn on_board_released(event: On<BoardReleasedEvent>, mut commands: Commands, board: Single<&Board>, selected_piece: Query<(Entity, &Position, &Moves), With<Piece>>) {
+    if board.is_in_bounds(event.0) && let Ok((selected_piece_entity, &selected_piece_position, moves)) = selected_piece.single() {
+        match moves.positions.contains(&event.0) {
+            true => {
+                commands.trigger(PieceMovedEvent(selected_piece_position, event.0));
+            }
+            false => {
+                commands.entity(selected_piece_entity).remove::<PieceFollowsCursor>();
+            }
         }
+    }
+}
 
-        if next_selected == *empty_piece {
-            // TODO: add the ability to move
-        }
+fn on_piece_deselected(_event: On<PieceDeselectedEvent>, mut commands: Commands, selected_piece: Single<(Entity, &SelectedPiece, &Moves), With<Piece>>) {
+    let (selected_piece_entity, selected_piece, moves) = *selected_piece;
 
-        commands.entity(selected_piece.yellow_square).despawn();
-        commands.entity(selected_piece_entity).remove::<(SelectedPiece, PieceFollowsCursor)>();
+    commands.entity(selected_piece.yellow_square).despawn();
+
+    for &black_circle in &moves.black_circles {
+        commands.entity(black_circle).despawn();
     }
 
-    commands.trigger(PieceSelectedEvent(next_selected));
+    commands.entity(selected_piece_entity).remove::<(SelectedPiece, PieceFollowsCursor, Moves)>();
 }
 
 fn on_piece_selected(event: On<PieceSelectedEvent>, mut commands: Commands, pieces: Query<(Entity, &Position), With<Piece>>) {
@@ -194,7 +258,57 @@ fn on_piece_selected(event: On<PieceSelectedEvent>, mut commands: Commands, piec
         position,
     )).id();
 
-    commands.entity(piece).insert((SelectedPiece { yellow_square }, PieceFollowsCursor));
+    commands.entity(piece).insert((
+        SelectedPiece { yellow_square },
+        PieceFollowsCursor,
+        Moves::default(),
+    ));
+
+    commands.trigger(GenerateMovesEvent);
+}
+
+fn on_generate_moves(_event: On<GenerateMovesEvent>, mut commands: Commands,
+    mut piece: Single<(&PieceColor, &Position, &mut Moves, &SlidingMoveGenerator), (With<Piece>, With<SelectedPiece>)>, board: Single<&Board>, pieces: Query<&PieceColor, With<Piece>>) {
+
+    let (color, &position, ref mut moves, move_gen) = *piece;
+
+    for &dir in &move_gen.0 {
+        let mut pos = position + dir;
+
+        while board.is_in_bounds(pos) && board.is_empty(pos) {
+            moves.insert(&mut commands, pos);
+            pos += dir;
+        }
+
+        if !board.is_in_bounds(pos) {
+            continue;
+        }
+
+        let target_color = match pieces.get(board[pos]) {
+            Ok(color) => color,
+            Err(_) => continue, // Will happen when I implement duck chess, since the duck has no color
+        };
+
+        if color != target_color {
+            moves.insert(&mut commands, pos);
+        }
+    }
+}
+
+fn on_piece_moved(event: On<PieceMovedEvent>, mut commands: Commands, mut board: Single<&mut Board>, mut pieces: Query<(Entity, &mut Position), With<Piece>>) {
+    commands.trigger(PieceDeselectedEvent);
+
+    let PieceMovedEvent(from, to) = *event;
+    let (piece, mut piece_position) = pieces.get_mut(board[from]).unwrap();
+
+    if !board.is_empty(to) {
+        commands.entity(board[to]).despawn();
+    }
+
+    board[from] = board.empty_piece;
+    board[to] = piece;
+
+    *piece_position = to;
 }
 
 fn sync_transform_with_position(mut entities: Query<(&Position, &mut Transform), Without<PieceFollowsCursor>>) {
@@ -211,15 +325,16 @@ fn piece_follow_cursor(cursor: Res<CursorWorldCoordinates>, mut piece: Single<&m
     piece.translation.y = cursor.0.y;
 }
 
-fn piece(commands: &mut Commands, asset_server: &AssetServer, position: Position, texture_path: &'static str) -> Entity {
-    let piece = commands.spawn((
+fn piece(commands: &mut Commands, asset_server: &AssetServer, color: PieceColor, position: Position, texture_path: &'static str, extra: Box<dyn PartialReflect>) -> Entity {
+    let mut piece = commands.spawn((
         Piece,
+        color,
         position,
         Sprite::from_image(asset_server.load(texture_path)),
         Transform::from_xyz(0.0, 0.0, 1.0),
     ));
-
-    piece.id()
+    
+    piece.insert_reflect(extra).id()
 }
 
 fn spawn_board(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -227,28 +342,42 @@ fn spawn_board(mut commands: Commands, asset_server: Res<AssetServer>) {
 
     let mut pieces = vec![empty_piece];
 
-    pieces.push(piece(&mut commands, &asset_server, Position::new(0, 0 as isize), "white/rook.png"));
-    pieces.push(piece(&mut commands, &asset_server, Position::new(0, 1 as isize), "white/knight.png"));
-    pieces.push(piece(&mut commands, &asset_server, Position::new(0, 2 as isize), "white/bishop.png"));
-    pieces.push(piece(&mut commands, &asset_server, Position::new(0, 3 as isize), "white/queen.png"));
-    pieces.push(piece(&mut commands, &asset_server, Position::new(0, 4 as isize), "white/king.png"));
-    pieces.push(piece(&mut commands, &asset_server, Position::new(0, 5 as isize), "white/bishop.png"));
-    pieces.push(piece(&mut commands, &asset_server, Position::new(0, 6 as isize), "white/knight.png"));
-    pieces.push(piece(&mut commands, &asset_server, Position::new(0, 7 as isize), "white/rook.png"));
+    let orthogonal = SlidingMoveGenerator(HashSet::from([
+        Direction::NORTH,
+        Direction::SOUTH,
+        Direction::EAST,
+        Direction::WEST,
+    ]));
 
-    pieces.push(piece(&mut commands, &asset_server, Position::new(7, 0 as isize), "black/rook.png"));
-    pieces.push(piece(&mut commands, &asset_server, Position::new(7, 1 as isize), "black/knight.png"));
-    pieces.push(piece(&mut commands, &asset_server, Position::new(7, 2 as isize), "black/bishop.png"));
-    pieces.push(piece(&mut commands, &asset_server, Position::new(7, 3 as isize), "black/queen.png"));
-    pieces.push(piece(&mut commands, &asset_server, Position::new(7, 4 as isize), "black/king.png"));
-    pieces.push(piece(&mut commands, &asset_server, Position::new(7, 5 as isize), "black/bishop.png"));
-    pieces.push(piece(&mut commands, &asset_server, Position::new(7, 6 as isize), "black/knight.png"));
-    pieces.push(piece(&mut commands, &asset_server, Position::new(7, 7 as isize), "black/rook.png"));
+    let diagonal = SlidingMoveGenerator(HashSet::from([
+        Direction::NORTH_EAST,
+        Direction::NORTH_WEST,
+        Direction::SOUTH_EAST,
+        Direction::SOUTH_WEST,
+    ]));
 
-    for file in 0..BOARD_LENGTH.y {
-        pieces.push(piece(&mut commands, &asset_server, Position::new(1, file as isize), "white/pawn.png"));
-        pieces.push(piece(&mut commands, &asset_server, Position::new(6, file as isize), "black/pawn.png"));
-    }
+    let queen = SlidingMoveGenerator(HashSet::from([
+        Direction::NORTH,
+        Direction::SOUTH,
+        Direction::EAST,
+        Direction::WEST,
+        Direction::NORTH_EAST,
+        Direction::NORTH_WEST,
+        Direction::SOUTH_EAST,
+        Direction::SOUTH_WEST,
+    ]));
+
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 0 as isize), "white/rook.png", Box::new(orthogonal.clone())));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 2 as isize), "white/bishop.png", Box::new(diagonal.clone())));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 3 as isize), "white/queen.png", Box::new(queen.clone())));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 5 as isize), "white/bishop.png", Box::new(diagonal.clone())));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 7 as isize), "white/rook.png", Box::new(orthogonal.clone())));
+
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 0 as isize), "black/rook.png", Box::new(orthogonal.clone())));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 2 as isize), "black/bishop.png", Box::new(diagonal.clone())));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 3 as isize), "black/queen.png", Box::new(queen.clone())));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 5 as isize), "black/bishop.png", Box::new(diagonal.clone())));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 7 as isize), "black/rook.png", Box::new(orthogonal.clone())));
 
     commands.spawn((
         Board::new(empty_piece),
