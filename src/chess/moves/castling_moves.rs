@@ -27,7 +27,7 @@ pub fn generate_castling_moves(_event: On<GenerateMovesEvent>, mut commands: Com
         }
 
         if board.is_in_bounds(pos) && board[pos] == bottom {
-            moves.insert(&mut commands, position + dir * 2, Move::Castle(NormalMove(position, position + dir * 2), NormalMove(bottom_position, position + dir)));
+            moves.insert(&mut commands, position + dir * 2, Move::Castle(NormalMove(position, position + dir * 2), NormalMove(bottom_position, position + dir)), false);
         }
     }
 }

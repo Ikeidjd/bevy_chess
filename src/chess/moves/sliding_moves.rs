@@ -15,12 +15,12 @@ pub fn generate_sliding_moves(_event: On<GenerateMovesEvent>, mut commands: Comm
         let mut pos = position + dir;
 
         while board.is_empty(pos) {
-            moves.insert(&mut commands, pos, Move::Normal(NormalMove(position, pos)));
+            moves.insert(&mut commands, pos, Move::Normal(NormalMove(position, pos)), false);
             pos += dir;
         }
 
         if board.is_enemy(pos, color, piece_colors) {
-            moves.insert(&mut commands, pos, Move::Normal(NormalMove(position, pos)));
+            moves.insert(&mut commands, pos, Move::Normal(NormalMove(position, pos)), true);
         }
     }
 }

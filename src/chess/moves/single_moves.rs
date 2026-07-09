@@ -13,9 +13,10 @@ pub fn generate_single_moves(_event: On<GenerateMovesEvent>, mut commands: Comma
 
     for &dir in &move_gen.0 {
         let pos = position + dir;
+        let empty = board.is_empty(pos);
 
-        if board.is_empty(pos) || board.is_enemy(pos, color, piece_colors) {
-            moves.insert(&mut commands, pos, Move::Normal(NormalMove(position, pos)));
+        if empty || board.is_enemy(pos, color, piece_colors) {
+            moves.insert(&mut commands, pos, Move::Normal(NormalMove(position, pos)), !empty);
         }
     }
 }

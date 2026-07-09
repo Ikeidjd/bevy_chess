@@ -1,6 +1,6 @@
 use bevy::{platform::collections::HashMap, prelude::*};
 
-use crate::chess::{ChessState, PIECE_SIZE, board::Board, moves::castling_moves::{CastleBottom, CastleTop}, piece::{Piece, PieceDeselectedEvent, PieceFollowsCursor}, position::Position};
+use crate::chess::{ChessState, board::Board, moves::castling_moves::{CastleBottom, CastleTop}, piece::{Piece, PieceDeselectedEvent, PieceFollowsCursor}, position::Position};
 
 pub mod single_moves;
 pub mod sliding_moves;
@@ -10,30 +10,32 @@ pub mod castling_moves;
 pub struct Moves {
     pub positions: HashMap<Position, Move>,
     pub black_circles: Vec<Entity>,
-    black_circle_mesh: Mesh2d,
-    black_circle_material: MeshMaterial2d<ColorMaterial>,
+    pub mmove: Handle<Image>,
+    pub capture: Handle<Image>,
 }
 
 impl Moves {
-    pub fn new(meshes: &mut Assets<Mesh>, materials: &mut Assets<ColorMaterial>) -> Self {
+    pub fn new(asset_server: &AssetServer) -> Self {
         Self {
             positions: HashMap::new(),
             black_circles: Vec::new(),
-            black_circle_mesh: Mesh2d(meshes.add(Circle::new(PIECE_SIZE / 8.0))),
-            black_circle_material: MeshMaterial2d(materials.add(Color::BLACK)),
+            mmove: asset_server.load("move_indicator.png"),
+            capture: asset_server.load("capture_indicator.png"),
         }
     }
 
-    pub fn insert(&mut self, commands: &mut Commands, position: Position, mmove: Move) {
+    pub fn insert(&mut self, commands: &mut Commands, position: Position, mmove: Move, is_capture: bool) {
         if !self.positions.contains_key(&position) {
             self.positions.insert(position, mmove);
 
             self.black_circles.push(commands.spawn((
                 BlackCircle,
-                self.black_circle_mesh.clone(),
-                self.black_circle_material.clone(),
                 position,
-                Transform::from_xyz(0.0, 0.0, 2.0),
+                Sprite::from(match is_capture {
+                    true => self.capture.clone(),
+                    false => self.mmove.clone(),
+                }),
+                Transform::from_xyz(0.0, 0.0, 0.5),
             )).id());
         }
     }

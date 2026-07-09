@@ -42,9 +42,7 @@ pub fn on_piece_deselected(_event: On<PieceDeselectedEvent>, mut commands: Comma
     commands.entity(selected_piece_entity).remove::<(SelectedPiece, PieceFollowsCursor, Moves)>();
 }
 
-pub fn on_piece_selected(event: On<PieceSelectedEvent>, mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<ColorMaterial>>,
-    pieces: Query<(Entity, &Position), With<Piece>>) {
-
+pub fn on_piece_selected(event: On<PieceSelectedEvent>, mut commands: Commands, asset_server: Res<AssetServer>, pieces: Query<(Entity, &Position), With<Piece>>) {
     let (piece, &position) = match pieces.get(event.0) {
         Ok(piece) => piece,
         Err(_) => return,
@@ -58,7 +56,7 @@ pub fn on_piece_selected(event: On<PieceSelectedEvent>, mut commands: Commands, 
     commands.entity(piece).insert((
         SelectedPiece { yellow_square },
         PieceFollowsCursor,
-        Moves::new(&mut meshes, &mut materials),
+        Moves::new(&asset_server),
     ));
 
     commands.trigger(GenerateMovesEvent);
