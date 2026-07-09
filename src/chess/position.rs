@@ -56,8 +56,8 @@ impl AddAssign<Direction> for Position {
     }
 }
 
-pub fn sync_transform_with_position(mut entities: Query<(&Position, &mut Transform), Without<PieceFollowsCursor>>) {
-    for (position, mut transform) in &mut entities {
+pub fn sync_transform_with_position(entities: Query<(&Position, &mut Transform), Without<PieceFollowsCursor>>) {
+    for (position, mut transform) in entities {
         let vec = position.to_translation();
 
         transform.translation.x = vec.x;

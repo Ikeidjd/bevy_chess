@@ -1,10 +1,11 @@
 use bevy::{platform::collections::HashMap, prelude::*};
 
-use crate::chess::{ChessState, board::Board, moves::castling_moves::{CastleBottom, CastleTop}, piece::{Piece, PieceDeselectedEvent, PieceFollowsCursor}, position::Position};
+use crate::chess::{ChessState, board::Board, piece::{Piece, PieceDeselectedEvent, PieceFollowsCursor}, position::Position};
 
 pub mod single_moves;
 pub mod sliding_moves;
 pub mod castling_moves;
+pub mod pawn_moves;
 
 #[derive(Component)]
 pub struct Moves {
@@ -41,9 +42,6 @@ impl Moves {
     }
 }
 
-#[derive(Component)]
-pub struct BlackCircle;
-
 #[derive(Clone, Copy)]
 pub struct NormalMove(pub Position, pub Position);
 
@@ -52,6 +50,15 @@ pub enum Move {
     Normal(NormalMove),
     Castle(NormalMove, NormalMove),
 }
+
+#[derive(Component)]
+pub struct MoveGenerator<T: Component>(pub T);
+
+#[derive(Component)]
+pub struct CaptureGenerator<T: Component>(pub T);
+
+#[derive(Component)]
+pub struct HasMoved;
 
 #[derive(Component)]
 pub struct PieceAnimation {
@@ -63,6 +70,9 @@ pub struct PieceAnimation {
 impl PieceAnimation {
     pub const SPEED: f32 = 4.0;
 }
+
+#[derive(Component)]
+pub struct BlackCircle;
 
 #[derive(Event)]
 pub struct GenerateMovesEvent;
@@ -87,7 +97,7 @@ pub fn on_piece_moved(event: On<PieceMovedEvent>, mut commands: Commands, mut bo
             board[from] = board.empty_piece;
             board[to] = piece;
 
-            commands.entity(piece).remove::<(CastleTop, CastleBottom)>();
+            commands.entity(piece).insert(HasMoved);
             *piece_position = to;
         }
         Move::Castle(normal_move_a, normal_move_b) => {
@@ -104,7 +114,7 @@ pub fn on_piece_animation_started(event: On<PieceAnimationStartedEvent>, mut com
 
     let PieceAnimationStartedEvent(piece, from, to) = *event;
 
-    if let Err(_) = cursor_followers.get(piece) {
+    if cursor_followers.get(piece).is_err() {
         commands.entity(piece).insert(PieceAnimation {
             start: from.to_translation(),
             end: to.to_translation(),
@@ -115,8 +125,12 @@ pub fn on_piece_animation_started(event: On<PieceAnimationStartedEvent>, mut com
     }
 }
 
-pub fn update_piece_animations(mut commands: Commands, mut next_state: ResMut<NextState<ChessState>>, time: Res<Time>, mut pieces: Query<(Entity, &mut PieceAnimation, &mut Transform)>) {
-    for (piece, mut animation, mut transform) in &mut pieces {
+pub fn update_piece_animations(mut commands: Commands, mut next_state: ResMut<NextState<ChessState>>, time: Res<Time>, pieces: Query<(Entity, &mut PieceAnimation, &mut Transform)>) {
+    if pieces.is_empty() {
+        next_state.set(ChessState::Main);
+    }
+
+    for (piece, mut animation, mut transform) in pieces {
         animation.progress += PieceAnimation::SPEED * time.delta_secs();
         animation.progress = animation.progress.clamp(0.0, 1.0);
 
@@ -128,9 +142,5 @@ pub fn update_piece_animations(mut commands: Commands, mut next_state: ResMut<Ne
 
         transform.translation.x = vec.x;
         transform.translation.y = vec.y;
-    }
-
-    if pieces.is_empty() {
-        next_state.set(ChessState::Main);
     }
 }

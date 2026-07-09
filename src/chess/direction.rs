@@ -16,6 +16,42 @@ impl Direction {
     pub const SOUTH_EAST: Self = Self::new(1, -1);
     pub const SOUTH_WEST: Self = Self::new(-1, -1);
 
+    pub const ORTHOGONAL: [Self; 4] = [
+        Direction::NORTH,
+        Direction::SOUTH,
+        Direction::EAST,
+        Direction::WEST,
+    ];
+
+    pub const DIAGONAL: [Self; 4] = [
+        Direction::NORTH_EAST,
+        Direction::NORTH_WEST,
+        Direction::SOUTH_EAST,
+        Direction::SOUTH_WEST,
+    ];
+
+    pub const MONARCH: [Self; 8] = [
+        Direction::NORTH,
+        Direction::SOUTH,
+        Direction::EAST,
+        Direction::WEST,
+        Direction::NORTH_EAST,
+        Direction::NORTH_WEST,
+        Direction::SOUTH_EAST,
+        Direction::SOUTH_WEST,
+    ];
+
+    pub const KNIGHT: [Self; 8] = [
+        Direction::new(2, 1),
+        Direction::new(2, -1),
+        Direction::new(-2, 1),
+        Direction::new(-2, -1),
+        Direction::new(1, 2),
+        Direction::new(-1, 2),
+        Direction::new(1, -2),
+        Direction::new(-1, -2),
+    ];
+
     pub const fn new(drank: isize, dfile: isize) -> Self {
         Self {
             drank,

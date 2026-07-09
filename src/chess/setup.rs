@@ -1,6 +1,6 @@
-use bevy::{platform::collections::HashSet, prelude::*};
+use bevy::prelude::*;
 
-use crate::chess::{board::Board, direction::Direction, moves::{castling_moves::{CastleBottom, CastleTop}, single_moves::SingleMoveGenerator, sliding_moves::SlidingMoveGenerator}, piece::{EmptyPiece, Piece, PieceColor}, position::Position};
+use crate::chess::{BOARD_LENGTH, board::Board, piece::{EmptyPiece, Piece, PieceColor}, position::Position, preset_pieces::{bishop, black_pawn, king, knight, queen, rook, white_pawn}};
 
 pub fn piece(commands: &mut Commands, asset_server: &AssetServer, color: PieceColor, position: Position, texture_path: &'static str, extra: impl Bundle) -> Entity {
     let mut piece = commands.spawn((
@@ -19,58 +19,28 @@ pub fn spawn_board(mut commands: Commands, asset_server: Res<AssetServer>) {
 
     let mut pieces = vec![empty_piece];
 
-    let orthogonal = HashSet::from([
-        Direction::NORTH,
-        Direction::SOUTH,
-        Direction::EAST,
-        Direction::WEST,
-    ]);
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 0 as isize), "white/rook.png", rook()));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 1 as isize), "white/knight.png", knight()));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 2 as isize), "white/bishop.png", bishop()));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 3 as isize), "white/queen.png", queen()));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 4 as isize), "white/king.png", king()));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 5 as isize), "white/bishop.png", bishop()));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 6 as isize), "white/knight.png", knight()));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 7 as isize), "white/rook.png", rook()));
 
-    let diagonal = HashSet::from([
-        Direction::NORTH_EAST,
-        Direction::NORTH_WEST,
-        Direction::SOUTH_EAST,
-        Direction::SOUTH_WEST,
-    ]);
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 0 as isize), "black/rook.png", rook()));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 1 as isize), "black/knight.png", knight()));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 2 as isize), "black/bishop.png", bishop()));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 3 as isize), "black/queen.png", queen()));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 4 as isize), "black/king.png", king()));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 5 as isize), "black/bishop.png", bishop()));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 6 as isize), "black/knight.png", knight()));
+    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 7 as isize), "black/rook.png", rook()));
 
-    let monarch: HashSet<_> = orthogonal.union(&diagonal).map(|&direction| direction).collect();
-
-    let mut knight = HashSet::new();
-
-    for &dir in &orthogonal {
-        knight.insert(dir * 2 + Direction::new(dir.dfile, dir.drank));
-        knight.insert(dir * 2 - Direction::new(dir.dfile, dir.drank));
+    for file in 0..BOARD_LENGTH.y {
+        pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(1, file as isize), "white/pawn.png", white_pawn()));
+        pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(6, file as isize), "black/pawn.png", black_pawn()));
     }
-
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 0 as isize), "white/rook.png", (
-        SlidingMoveGenerator(orthogonal.clone()),
-        CastleBottom,
-    )));
-
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 7 as isize), "white/rook.png", (
-        SlidingMoveGenerator(orthogonal.clone()),
-        CastleBottom,
-    )));
-
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 0 as isize), "black/rook.png", (
-        SlidingMoveGenerator(orthogonal.clone()),
-        CastleBottom,
-    )));
-    
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 7 as isize), "black/rook.png", (
-        SlidingMoveGenerator(orthogonal.clone()),
-        CastleBottom,
-    )));
-
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::White, Position::new(0, 4 as isize), "white/king.png", (
-        SingleMoveGenerator(monarch.clone()),
-        CastleTop,
-    )));
-
-    pieces.push(piece(&mut commands, &asset_server, PieceColor::Black, Position::new(7, 4 as isize), "black/king.png", (
-        SingleMoveGenerator(monarch.clone()),
-        CastleTop,
-    )));
 
     commands.spawn((
         Board::new(empty_piece),
