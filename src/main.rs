@@ -17,10 +17,17 @@ fn main() {
             }),
             ..default()
         }).set(ImagePlugin::default_nearest()), ChessPlugin))
+        .init_state::<MainState>()
         .init_resource::<CursorWorldCoordinates>()
         .add_systems(Startup, spawn_camera)
         .add_systems(Update, (check_fullscreen, update_cursor_world_coordinates))
         .run();
+}
+
+#[derive(States, Default, Debug, Hash, PartialEq, Eq, Clone, Copy)]
+pub enum MainState {
+    #[default]
+    Chess,
 }
 
 #[derive(Resource, Default)]

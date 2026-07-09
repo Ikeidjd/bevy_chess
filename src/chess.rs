@@ -2,7 +2,7 @@ use std::ops::{Add, AddAssign, Index, IndexMut, Mul, Sub};
 
 use bevy::{ecs::query::QueryFilter, math::{USizeVec2, usizevec2}, platform::collections::{HashMap, HashSet}, prelude::*};
 
-use crate::CursorWorldCoordinates;
+use crate::{CursorWorldCoordinates, MainState};
 
 pub const PIECE_SIZE: f32 = 48.0;
 pub const BOARD_LENGTH: USizeVec2 = usizevec2(8, 8);
@@ -11,8 +11,13 @@ pub struct ChessPlugin;
 
 impl Plugin for ChessPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, (spawn_board, sync_pieces_with_board).chain())
-            .add_systems(Update, (check_board_clicked, (sync_transform_with_position, piece_follow_cursor)).chain())
+        app.add_sub_state::<ChessState>()
+            .add_systems(Startup, (spawn_board, sync_pieces_with_board).chain())
+            .add_systems(Update, (
+                check_board_clicked.run_if(in_state(ChessState::Main)),
+                (sync_transform_with_position, piece_follow_cursor).run_if(in_state(ChessState::Main)),
+                update_piece_animations,
+            ).chain())
             .add_observer(on_board_pressed)
             .add_observer(on_board_released)
             .add_observer(on_piece_deselected)
@@ -20,8 +25,17 @@ impl Plugin for ChessPlugin {
             .add_observer(generate_single_moves)
             .add_observer(generate_sliding_moves)
             .add_observer(generate_castling_moves)
-            .add_observer(on_piece_moved);
+            .add_observer(on_piece_moved)
+            .add_observer(on_piece_animation_started);
     }
+}
+
+#[derive(SubStates, Debug, Default, Hash, PartialEq, Eq, Clone, Copy)]
+#[source(MainState = MainState::Chess)]
+enum ChessState {
+    #[default]
+    Main,
+    PieceAnimation,
 }
 
 #[derive(Component)]
@@ -226,6 +240,17 @@ enum Move {
     Castle(NormalMove, NormalMove),
 }
 
+#[derive(Component)]
+struct PieceAnimation {
+    start: Vec2,
+    end: Vec2,
+    progress: f32,
+}
+
+impl PieceAnimation {
+    const SPEED: f32 = 4.0;
+}
+
 #[derive(Component, Clone)]
 struct SingleMoveGenerator(HashSet<Direction>);
 
@@ -255,6 +280,9 @@ struct GenerateMovesEvent;
 
 #[derive(Event, Clone)]
 struct PieceMovedEvent(Move);
+
+#[derive(Event)]
+struct PieceAnimationStartedEvent(Entity, Position, Position);
 
 fn check_board_clicked(mut commands: Commands, input: Res<ButtonInput<MouseButton>>, cursor: Res<CursorWorldCoordinates>) {
     let cursor = Position::from_translation(cursor.0);
@@ -382,11 +410,11 @@ fn generate_castling_moves(_event: On<GenerateMovesEvent>, mut commands: Command
 }
 
 fn on_piece_moved(event: On<PieceMovedEvent>, mut commands: Commands, mut board: Single<&mut Board>, mut pieces: Query<(Entity, &mut Position), With<Piece>>) {
-    commands.trigger(PieceDeselectedEvent);
-
     match event.0 {
         Move::Normal(NormalMove(from, to)) => {
             let (piece, mut piece_position) = pieces.get_mut(board[from]).unwrap();
+
+            commands.trigger(PieceAnimationStartedEvent(piece, from, to));
 
             if !board.is_empty(to) {
                 commands.entity(board[to]).despawn();
@@ -402,6 +430,44 @@ fn on_piece_moved(event: On<PieceMovedEvent>, mut commands: Commands, mut board:
             commands.trigger(PieceMovedEvent(Move::Normal(normal_move_a)));
             commands.trigger(PieceMovedEvent(Move::Normal(normal_move_b)));
         }
+    }
+
+    commands.trigger(PieceDeselectedEvent);
+}
+
+fn on_piece_animation_started(event: On<PieceAnimationStartedEvent>, mut commands: Commands, mut next_state: ResMut<NextState<ChessState>>,
+    cursor_followers: Query<(), With<PieceFollowsCursor>>) {
+
+    let PieceAnimationStartedEvent(piece, from, to) = *event;
+
+    if let Err(_) = cursor_followers.get(piece) {
+        commands.entity(piece).insert(PieceAnimation {
+            start: from.to_translation(),
+            end: to.to_translation(),
+            progress: 0.0
+        });
+
+        next_state.set(ChessState::PieceAnimation);
+    }
+}
+
+fn update_piece_animations(mut commands: Commands, mut next_state: ResMut<NextState<ChessState>>, time: Res<Time>, mut pieces: Query<(Entity, &mut PieceAnimation, &mut Transform)>) {
+    for (piece, mut animation, mut transform) in &mut pieces {
+        animation.progress += PieceAnimation::SPEED * time.delta_secs();
+        animation.progress = animation.progress.clamp(0.0, 1.0);
+
+        if animation.progress == 1.0 {
+            commands.entity(piece).remove::<PieceAnimation>();
+        }
+
+        let vec = animation.start.lerp(animation.end, animation.progress);
+
+        transform.translation.x = vec.x;
+        transform.translation.y = vec.y;
+    }
+
+    if pieces.is_empty() {
+        next_state.set(ChessState::Main);
     }
 }
 
