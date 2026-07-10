@@ -1,11 +1,12 @@
 use bevy::{platform::collections::HashMap, prelude::*};
 
-use crate::chess::{ChessState, board::Board, piece::{Piece, PieceDeselectedEvent, PieceFollowsCursor}, position::Position};
+use crate::{chess::{ChessState, board::Board, moves::promotion::AttemptPromotionEvent, piece::{Piece, PieceDeselectedEvent, PieceFollowsCursor}, position::Position}, layers};
 
 pub mod single_moves;
 pub mod sliding_moves;
 pub mod castling_moves;
 pub mod pawn_moves;
+pub mod promotion;
 
 #[derive(Component)]
 pub struct Moves {
@@ -36,7 +37,7 @@ impl Moves {
                     true => self.capture.clone(),
                     false => self.mmove.clone(),
                 }),
-                Transform::from_xyz(0.0, 0.0, 0.5),
+                Transform::from_xyz(0.0, 0.0, layers::BLACK_CIRCLES),
             )).id());
         }
     }
@@ -114,27 +115,28 @@ pub fn on_piece_animation_started(event: On<PieceAnimationStartedEvent>, mut com
 
     let PieceAnimationStartedEvent(piece, from, to) = *event;
 
-    if cursor_followers.get(piece).is_err() {
-        commands.entity(piece).insert(PieceAnimation {
-            start: from.to_translation(),
-            end: to.to_translation(),
-            progress: 0.0
-        });
-
-        next_state.set(ChessState::PieceAnimation);
+    if cursor_followers.get(piece).is_ok() {
+        commands.trigger(AttemptPromotionEvent(piece, from, to));
+        return;
     }
+
+    commands.entity(piece).insert(PieceAnimation {
+        start: from.to_translation(),
+        end: to.to_translation(),
+        progress: 0.0
+    });
+
+    next_state.set(ChessState::PieceAnimation);
 }
 
 pub fn update_piece_animations(mut commands: Commands, mut next_state: ResMut<NextState<ChessState>>, time: Res<Time>, pieces: Query<(Entity, &mut PieceAnimation, &mut Transform)>) {
-    if pieces.is_empty() {
-        next_state.set(ChessState::Main);
-    }
-
     for (piece, mut animation, mut transform) in pieces {
         animation.progress += PieceAnimation::SPEED * time.delta_secs();
         animation.progress = animation.progress.clamp(0.0, 1.0);
 
         if animation.progress == 1.0 {
+            next_state.set(ChessState::Main);
+            commands.trigger(AttemptPromotionEvent(piece, Position::from_translation(animation.start), Position::from_translation(animation.end)));
             commands.entity(piece).remove::<PieceAnimation>();
         }
 

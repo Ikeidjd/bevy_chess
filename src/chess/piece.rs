@@ -30,6 +30,12 @@ pub struct PieceSelectedEvent(pub Entity);
 #[derive(Event)]
 pub struct PieceDeselectedEvent;
 
+#[derive(Event)]
+pub struct StartFollowingCursorEvent(pub Entity);
+
+#[derive(Event)]
+pub struct StopFollowingCursorEvent(pub Entity);
+
 pub fn on_piece_deselected(_event: On<PieceDeselectedEvent>, mut commands: Commands, selected_piece: Single<(Entity, &SelectedPiece, &Moves), With<Piece>>) {
     let (selected_piece_entity, selected_piece, moves) = *selected_piece;
 
@@ -39,7 +45,8 @@ pub fn on_piece_deselected(_event: On<PieceDeselectedEvent>, mut commands: Comma
         commands.entity(black_circle).despawn();
     }
 
-    commands.entity(selected_piece_entity).remove::<(SelectedPiece, PieceFollowsCursor, Moves)>();
+    commands.entity(selected_piece_entity).remove::<(SelectedPiece, Moves)>();
+    commands.trigger(StopFollowingCursorEvent(selected_piece_entity));
 }
 
 pub fn on_piece_selected(event: On<PieceSelectedEvent>, mut commands: Commands, asset_server: Res<AssetServer>, pieces: Query<(Entity, &Position), With<Piece>>) {
@@ -55,14 +62,28 @@ pub fn on_piece_selected(event: On<PieceSelectedEvent>, mut commands: Commands, 
 
     commands.entity(piece).insert((
         SelectedPiece { yellow_square },
-        PieceFollowsCursor,
         Moves::new(&asset_server),
     ));
 
+    commands.trigger(StartFollowingCursorEvent(piece));
     commands.trigger(GenerateMovesEvent);
 }
 
 pub fn piece_follow_cursor(cursor: Res<CursorWorldCoordinates>, mut piece: Single<&mut Transform, With<PieceFollowsCursor>>) {
     piece.translation.x = cursor.0.x;
     piece.translation.y = cursor.0.y;
+}
+
+pub fn start_following_cursor(event: On<StartFollowingCursorEvent>, mut commands: Commands, mut pieces: Query<&mut Transform, Without<PieceFollowsCursor>>) {
+    if let Ok(mut transform) = pieces.get_mut(event.0) {
+        transform.translation.z += 0.1;
+        commands.entity(event.0).insert(PieceFollowsCursor);
+    }
+}
+
+pub fn stop_following_cursor(event: On<StopFollowingCursorEvent>, mut commands: Commands, mut pieces: Query<&mut Transform, With<PieceFollowsCursor>>) {
+    if let Ok(mut transform) = pieces.get_mut(event.0) {
+        transform.translation.z -= 0.1;
+        commands.entity(event.0).remove::<PieceFollowsCursor>();
+    }
 }

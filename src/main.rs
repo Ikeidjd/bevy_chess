@@ -2,6 +2,7 @@ use bevy::{camera::ScalingMode, input::keyboard::Key, prelude::*, window::{Prima
 
 use crate::chess::ChessPlugin;
 
+pub mod layers;
 mod chess;
 
 const WINDOW_SIZE: Vec2 = vec2(16.0 / 9.0 * 540.0, 540.0);

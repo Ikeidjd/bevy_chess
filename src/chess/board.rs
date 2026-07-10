@@ -2,7 +2,7 @@ use std::ops::{Index, IndexMut};
 
 use bevy::{ecs::query::QueryFilter, prelude::*};
 
-use crate::{CursorWorldCoordinates, chess::{BOARD_LENGTH, moves::{Moves, PieceMovedEvent}, piece::{Piece, PieceColor, PieceDeselectedEvent, PieceFollowsCursor, PieceSelectedEvent}, position::Position}};
+use crate::{CursorWorldCoordinates, chess::{BOARD_LENGTH, moves::{Moves, PieceMovedEvent}, piece::{Piece, PieceColor, PieceDeselectedEvent, PieceSelectedEvent, SelectedPiece, StopFollowingCursorEvent}, position::Position}};
 
 #[derive(Component)]
 pub struct Board {
@@ -64,7 +64,7 @@ pub fn check_board_clicked(mut commands: Commands, input: Res<ButtonInput<MouseB
     }
 }
 
-pub fn on_board_pressed(event: On<BoardPressedEvent>, mut commands: Commands, board: Single<&Board>, selected_piece: Query<&Moves, With<Piece>>) {
+pub fn on_board_pressed(event: On<BoardPressedEvent>, mut commands: Commands, board: Single<&Board>, selected_piece: Query<&Moves, (With<Piece>, With<SelectedPiece>)>) {
     if let Ok(moves) = selected_piece.single() && moves.positions.contains_key(&event.0) {
         return;
     }
@@ -75,14 +75,14 @@ pub fn on_board_pressed(event: On<BoardPressedEvent>, mut commands: Commands, bo
     }
 }
 
-pub fn on_board_released(event: On<BoardReleasedEvent>, mut commands: Commands, board: Single<&Board>, selected_piece: Query<(Entity, &Moves), With<Piece>>) {
-    if board.is_in_bounds(event.0) && let Ok((selected_piece_entity, moves)) = selected_piece.single() {
+pub fn on_board_released(event: On<BoardReleasedEvent>, mut commands: Commands, selected_piece: Query<(Entity, &Moves), (With<Piece>, With<SelectedPiece>)>) {
+    if let Ok((selected_piece_entity, moves)) = selected_piece.single() {
         match moves.positions.get(&event.0) {
             Some(&mmove) => {
                 commands.trigger(PieceMovedEvent(mmove));
             }
             None => {
-                commands.entity(selected_piece_entity).remove::<PieceFollowsCursor>();
+                commands.trigger(StopFollowingCursorEvent(selected_piece_entity));
             }
         }
     }

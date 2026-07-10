@@ -7,13 +7,13 @@ pub struct Direction {
 }
 
 impl Direction {
-    pub const NORTH: Self = Self::new(0, 1);
-    pub const SOUTH: Self = Self::new(0, -1);
-    pub const EAST: Self = Self::new(1, 0);
-    pub const WEST: Self = Self::new(-1, 0);
+    pub const NORTH: Self = Self::new(1, 0);
+    pub const SOUTH: Self = Self::new(-1, 0);
+    pub const EAST: Self = Self::new(0, 1);
+    pub const WEST: Self = Self::new(0, -1);
     pub const NORTH_EAST: Self = Self::new(1, 1);
-    pub const NORTH_WEST: Self = Self::new(-1, 1);
-    pub const SOUTH_EAST: Self = Self::new(1, -1);
+    pub const NORTH_WEST: Self = Self::new(1, -1);
+    pub const SOUTH_EAST: Self = Self::new(-1, 1);
     pub const SOUTH_WEST: Self = Self::new(-1, -1);
 
     pub const ORTHOGONAL: [Self; 4] = [

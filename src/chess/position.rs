@@ -56,7 +56,14 @@ impl AddAssign<Direction> for Position {
     }
 }
 
-pub fn sync_transform_with_position(entities: Query<(&Position, &mut Transform), Without<PieceFollowsCursor>>) {
+#[derive(Event)]
+pub struct SyncTransformWithPosition;
+
+pub fn sync_transform_with_position(mut commands: Commands) {
+    commands.trigger(SyncTransformWithPosition);
+}
+
+pub fn on_sync_transform_with_position(_event: On<SyncTransformWithPosition>, entities: Query<(&Position, &mut Transform), Without<PieceFollowsCursor>>) {
     for (position, mut transform) in entities {
         let vec = position.to_translation();
 

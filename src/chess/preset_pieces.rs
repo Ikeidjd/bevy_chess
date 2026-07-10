@@ -1,19 +1,21 @@
 use bevy::{platform::collections::HashSet, prelude::*};
 
-use crate::chess::{direction::Direction, moves::{CaptureGenerator, castling_moves::{CastleBottom, CastleTop}, pawn_moves::PawnMoveGenerator, single_moves::SingleMoveGenerator, sliding_moves::SlidingMoveGenerator}};
+use crate::chess::{direction::Direction, moves::{CaptureGenerator, castling_moves::{CastleBottom, CastleTop}, pawn_moves::PawnMoveGenerator, promotion::PromotingPiece, single_moves::SingleMoveGenerator, sliding_moves::SlidingMoveGenerator}};
 
-pub fn white_pawn() -> impl Bundle {
+pub fn pawn(drank: isize) -> impl Bundle {
     (
-        PawnMoveGenerator(Direction::new(1, 0)),
-        CaptureGenerator(SingleMoveGenerator(HashSet::from([Direction::new(1, -1), Direction::new(1, 1)]))),
+        PawnMoveGenerator(Direction::new(drank, 0)),
+        CaptureGenerator(SingleMoveGenerator(HashSet::from([Direction::new(drank, -1), Direction::new(drank, 1)]))),
+        PromotingPiece,
     )
 }
 
+pub fn white_pawn() -> impl Bundle {
+    pawn(1)
+}
+
 pub fn black_pawn() -> impl Bundle {
-    (
-        PawnMoveGenerator(Direction::new(-1, 0)),
-        CaptureGenerator(SingleMoveGenerator(HashSet::from([Direction::new(-1, -1), Direction::new(-1, 1)]))),
-    )
+    pawn(-1)
 }
 
 pub fn knight() -> impl Bundle {

@@ -6,9 +6,9 @@ use crate::chess::{board::Board, direction::Direction, moves::{GenerateMovesEven
 pub struct PawnMoveGenerator(pub Direction);
 
 pub fn generate_pawn_moves(_event: On<GenerateMovesEvent>, mut commands: Commands, board: Single<&Board>,
-    pawns: Query<(Entity, &Position, &mut Moves, &PawnMoveGenerator), With<Piece>>, has_moved: Query<(), With<HasMoved>>) {
+    pieces: Query<(Entity, &Position, &mut Moves, &PawnMoveGenerator), With<Piece>>, has_moved: Query<(), With<HasMoved>>) {
 
-    for (pawn, &position, mut moves, move_gen) in pawns {
+    for (piece, &position, mut moves, move_gen) in pieces {
         let &PawnMoveGenerator(direction) = move_gen;
 
         let mut pos = position + direction;
@@ -19,7 +19,7 @@ pub fn generate_pawn_moves(_event: On<GenerateMovesEvent>, mut commands: Command
 
         moves.insert(&mut commands, pos, Move::Normal(NormalMove(position, pos)), false);
 
-        if has_moved.get(pawn).is_ok() {
+        if has_moved.get(piece).is_ok() {
             continue;
         }
 
