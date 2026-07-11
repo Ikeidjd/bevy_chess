@@ -2,9 +2,9 @@ use std::ops::{Index, IndexMut};
 
 use bevy::{ecs::query::QueryFilter, prelude::*};
 
-use crate::{CursorWorldCoordinates, chess::{BOARD_LENGTH, moves::{Moves, PieceMovedEvent}, piece::{Piece, PieceColor, PieceDeselectedEvent, PieceSelectedEvent, SelectedPiece, StopFollowingCursorEvent}, position::Position}};
+use crate::{CursorWorldCoordinates, chess::{BOARD_LENGTH, moves::{HasMoved, Moves, PieceMovedEvent}, piece::{Piece, PieceColor, PieceDeselectedEvent, PieceSelectedEvent, SelectedPiece, StopFollowingCursorEvent}, position::Position}};
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct Board {
     pub pieces: [[Entity; BOARD_LENGTH.x]; BOARD_LENGTH.y],
     pub empty_piece: Entity,
@@ -15,6 +15,30 @@ impl Board {
         Self {
             pieces: [[empty_piece; BOARD_LENGTH.x]; BOARD_LENGTH.y],
             empty_piece: empty_piece,
+        }
+    }
+
+    pub fn do_move(&mut self, commands: &mut Commands, board_changes: &mut BoardChanges, piece: Entity, from: Position, to: Position) {
+        board_changes.changes.push((from, self[from]));
+        board_changes.changes.push((to, self[to]));
+
+        if !self.is_empty(to) {
+            board_changes.to_despawn.push(self[to]);
+            commands.entity(self[to]).insert(Visibility::Hidden);
+        }
+
+        self[to] = piece;
+        self[from] = self.empty_piece;
+
+        commands.entity(piece).insert((to, HasMoved));
+    }
+
+    pub fn restore_changes(&mut self, commands: &mut Commands, board_changes: &mut BoardChanges) {
+        let BoardChanges { changes, .. } = std::mem::take(board_changes);
+
+        for (position, piece) in changes.into_iter().rev() {
+            self[position] = piece;
+            commands.entity(piece).insert((position, Visibility::Visible));
         }
     }
 
@@ -48,11 +72,27 @@ impl IndexMut<Position> for Board {
     }
 }
 
-#[derive(Event)]
-pub struct BoardPressedEvent(Position);
+#[derive(Component, Default)]
+pub struct BoardChanges {
+    pub changes: Vec<(Position, Entity)>,
+    pub to_despawn: Vec<Entity>,
+}
+
+impl BoardChanges {
+    pub fn clear(&mut self, commands: &mut Commands) {
+        let Self { to_despawn, .. } = std::mem::take(self);
+
+        for piece in to_despawn {
+            commands.entity(piece).despawn();
+        }
+    }
+}
 
 #[derive(Event)]
-pub struct BoardReleasedEvent(Position);
+pub struct BoardPressedEvent(pub Position);
+
+#[derive(Event)]
+pub struct BoardReleasedEvent(pub Position);
 
 pub fn check_board_clicked(mut commands: Commands, input: Res<ButtonInput<MouseButton>>, cursor: Res<CursorWorldCoordinates>) {
     let cursor = Position::from_translation(cursor.0);

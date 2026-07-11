@@ -1,6 +1,6 @@
 use bevy::{platform::collections::HashMap, prelude::*};
 
-use crate::{chess::{ChessState, board::Board, moves::promotion::AttemptPromotionEvent, piece::{Piece, PieceDeselectedEvent, PieceFollowsCursor}, position::Position}, layers};
+use crate::{chess::{ChessState, board::{Board, BoardChanges}, moves::promotion::AttemptPromotionEvent, piece::{Piece, PieceDeselectedEvent, PieceFollowsCursor}, position::Position}, layers};
 
 pub mod single_moves;
 pub mod sliding_moves;
@@ -84,22 +84,17 @@ pub struct PieceMovedEvent(pub Move);
 #[derive(Event)]
 pub struct PieceAnimationStartedEvent(pub Entity, pub Position, pub Position);
 
-pub fn on_piece_moved(event: On<PieceMovedEvent>, mut commands: Commands, mut board: Single<&mut Board>, mut pieces: Query<(Entity, &mut Position), With<Piece>>) {
+#[derive(Event)]
+pub struct MoveFullyEndedEvent;
+
+pub fn on_piece_moved(event: On<PieceMovedEvent>, mut commands: Commands, mut board: Single<(&mut Board, &mut BoardChanges)>, mut pieces: Query<Entity, With<Piece>>) {
     match event.0 {
         Move::Normal(NormalMove(from, to)) => {
-            let (piece, mut piece_position) = pieces.get_mut(board[from]).unwrap();
+            let (ref mut board, ref mut board_changes) = *board;
+            let piece = pieces.get_mut(board[from]).unwrap();
 
             commands.trigger(PieceAnimationStartedEvent(piece, from, to));
-
-            if !board.is_empty(to) {
-                commands.entity(board[to]).despawn();
-            }
-
-            board[from] = board.empty_piece;
-            board[to] = piece;
-
-            commands.entity(piece).insert(HasMoved);
-            *piece_position = to;
+            board.do_move(&mut commands, board_changes, piece, from, to);
         }
         Move::Castle(normal_move_a, normal_move_b) => {
             commands.trigger(PieceMovedEvent(Move::Normal(normal_move_a)));
@@ -115,15 +110,15 @@ pub fn on_piece_animation_started(event: On<PieceAnimationStartedEvent>, mut com
 
     let PieceAnimationStartedEvent(piece, from, to) = *event;
 
-    if cursor_followers.get(piece).is_ok() {
-        commands.trigger(AttemptPromotionEvent(piece, from, to));
-        return;
-    }
+    let progress = match cursor_followers.get(piece) {
+        Ok(_) => 1.0,
+        Err(_) => 0.0,
+    };
 
     commands.entity(piece).insert(PieceAnimation {
         start: from.to_translation(),
         end: to.to_translation(),
-        progress: 0.0
+        progress,
     });
 
     next_state.set(ChessState::PieceAnimation);
@@ -136,7 +131,7 @@ pub fn update_piece_animations(mut commands: Commands, mut next_state: ResMut<Ne
 
         if animation.progress == 1.0 {
             next_state.set(ChessState::Main);
-            commands.trigger(AttemptPromotionEvent(piece, Position::from_translation(animation.start), Position::from_translation(animation.end)));
+            commands.trigger(AttemptPromotionEvent(piece));
             commands.entity(piece).remove::<PieceAnimation>();
         }
 
@@ -145,4 +140,8 @@ pub fn update_piece_animations(mut commands: Commands, mut next_state: ResMut<Ne
         transform.translation.x = vec.x;
         transform.translation.y = vec.y;
     }
+}
+
+pub fn on_move_fully_ended(_event: On<MoveFullyEndedEvent>, mut commands: Commands, mut board_changes: Single<&mut BoardChanges, With<Board>>) {
+    board_changes.clear(&mut commands);
 }

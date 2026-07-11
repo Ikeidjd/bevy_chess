@@ -1,6 +1,6 @@
 use bevy::{math::{USizeVec2, usizevec2}, prelude::*};
 
-use crate::{MainState, chess::{board::{check_board_clicked, on_board_pressed, on_board_released}, moves::{castling_moves::generate_castling_moves, on_piece_animation_started, on_piece_moved, pawn_moves::generate_pawn_moves, promotion::{attempt_promotion, check_promotion_option_clicked}, single_moves::{generate_single_captures, generate_single_moves, generate_single_moves_and_captures}, sliding_moves::{generate_sliding_captures, generate_sliding_moves, generate_sliding_moves_and_captures}, update_piece_animations}, piece::{on_piece_deselected, on_piece_selected, piece_follow_cursor, start_following_cursor, stop_following_cursor}, position::{on_sync_transform_with_position, sync_transform_with_position}, setup::{spawn_board, sync_pieces_with_board}}};
+use crate::{MainState, chess::{board::{check_board_clicked, on_board_pressed, on_board_released}, moves::{castling_moves::generate_castling_moves, on_move_fully_ended, on_piece_animation_started, on_piece_moved, pawn_moves::generate_pawn_moves, promotion::{attempt_promotion, check_promotion_option_clicked}, single_moves::{generate_single_captures, generate_single_moves, generate_single_moves_and_captures}, sliding_moves::{generate_sliding_captures, generate_sliding_moves, generate_sliding_moves_and_captures}, update_piece_animations}, piece::{on_piece_deselected, on_piece_selected, piece_follow_cursor, start_following_cursor, stop_following_cursor}, position::{on_sync_transform_with_position, sync_transform_with_position}, setup::{spawn_board, sync_pieces_with_board}}};
 
 mod position;
 mod direction;
@@ -40,6 +40,7 @@ impl Plugin for ChessPlugin {
             .add_observer(generate_castling_moves)
             .add_observer(generate_pawn_moves)
             .add_observer(attempt_promotion)
+            .add_observer(on_move_fully_ended)
             .add_observer(on_piece_moved)
             .add_observer(on_piece_animation_started);
     }
