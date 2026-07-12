@@ -1,60 +1,52 @@
-use bevy::{platform::collections::HashSet, prelude::*};
+use bevy::{ecs::query::QueryFilter, platform::collections::HashSet, prelude::*};
 
-use crate::chess::{board::Board, direction::Direction, moves::{CaptureGenerator, GenerateMovesEvent, Move, MoveGenerator, Moves, NormalMove}, piece::{Piece, PieceColor, SelectedPiece}, position::Position};
+use crate::chess::{board::Board, direction::Direction, moves::{CaptureGenerator, GenerateMovesEvent, Move, MoveGenerator, Moves, NormalMove}, piece::{Piece, PieceColor}, position::Position};
 
 #[derive(Component, Clone)]
 pub struct SlidingMoveGenerator(pub HashSet<Direction>);
 
-pub fn generate_sliding_moves(_event: On<GenerateMovesEvent>, mut commands: Commands,
-    board: Single<&Board>, mut piece: Single<(&Position, &mut Moves, &MoveGenerator<SlidingMoveGenerator>), (With<Piece>, With<SelectedPiece>)>) {
+impl SlidingMoveGenerator {
+    fn generate<F: QueryFilter>(&self, commands: &mut Commands, moves: &mut Moves, board: &Board, position: Position, color: PieceColor, piece_colors: Query<&PieceColor, F>,
+        allow_moves: bool, allow_captures: bool) {
 
-    let (&position, ref mut moves, MoveGenerator(move_gen)) = *piece;
+        for &dir in &self.0 {
+            let mut pos = position + dir;
 
-    for &dir in &move_gen.0 {
-        let mut pos = position + dir;
+            while board.is_empty(pos) {
+                if allow_moves {
+                    moves.insert(commands, pos, Move::Normal(NormalMove(position, pos)), false);
+                }
 
-        while board.is_empty(pos) {
-            moves.insert(&mut commands, pos, Move::Normal(NormalMove(position, pos)), false);
-            pos += dir;
+                pos += dir;
+            }
+
+            if allow_captures && board.is_enemy(pos, color, piece_colors) {
+                moves.insert(commands, pos, Move::Normal(NormalMove(position, pos)), true);
+            }
         }
     }
 }
 
-pub fn generate_sliding_captures(_event: On<GenerateMovesEvent>, mut commands: Commands,
-    board: Single<&Board>, mut piece: Single<(&PieceColor, &Position, &mut Moves, &CaptureGenerator<SlidingMoveGenerator>), (With<Piece>, With<SelectedPiece>)>,
-    piece_colors: Query<&PieceColor, With<Piece>>) {
+pub fn generate_sliding_moves(_event: On<GenerateMovesEvent>, mut commands: Commands, board: Single<&Board>,
+    pieces: Query<(&PieceColor, &Position, &mut Moves, &MoveGenerator<SlidingMoveGenerator>), With<Piece>>, piece_colors: Query<&PieceColor, With<Piece>>) {
 
-    let (&color, &position, ref mut moves, CaptureGenerator(move_gen)) = *piece;
-
-    for &dir in &move_gen.0 {
-        let mut pos = position + dir;
-
-        while board.is_empty(pos) {
-            pos += dir;
-        }
-
-        if board.is_enemy(pos, color, piece_colors) {
-            moves.insert(&mut commands, pos, Move::Normal(NormalMove(position, pos)), true);
-        }
+    for (&color, &position, mut moves, MoveGenerator(move_gen)) in pieces {
+        move_gen.generate(&mut commands, &mut moves, &board, position, color, piece_colors, true, false);
     }
 }
 
-pub fn generate_sliding_moves_and_captures(_event: On<GenerateMovesEvent>, mut commands: Commands,
-    board: Single<&Board>, mut piece: Single<(&PieceColor, &Position, &mut Moves, &SlidingMoveGenerator), (With<Piece>, With<SelectedPiece>)>,
-    piece_colors: Query<&PieceColor, With<Piece>>) {
+pub fn generate_sliding_captures(_event: On<GenerateMovesEvent>, mut commands: Commands, board: Single<&Board>,
+    pieces: Query<(&PieceColor, &Position, &mut Moves, &CaptureGenerator<SlidingMoveGenerator>), With<Piece>>, piece_colors: Query<&PieceColor, With<Piece>>) {
 
-    let (&color, &position, ref mut moves, move_gen) = *piece;
+    for (&color, &position, mut moves, CaptureGenerator(move_gen)) in pieces {
+        move_gen.generate(&mut commands, &mut moves, &board, position, color, piece_colors, false, true);
+    }
+}
 
-    for &dir in &move_gen.0 {
-        let mut pos = position + dir;
+pub fn generate_sliding_moves_and_captures(_event: On<GenerateMovesEvent>, mut commands: Commands, board: Single<&Board>,
+    pieces: Query<(&PieceColor, &Position, &mut Moves, &SlidingMoveGenerator), With<Piece>>, piece_colors: Query<&PieceColor, With<Piece>>) {
 
-        while board.is_empty(pos) {
-            moves.insert(&mut commands, pos, Move::Normal(NormalMove(position, pos)), false);
-            pos += dir;
-        }
-
-        if board.is_enemy(pos, color, piece_colors) {
-            moves.insert(&mut commands, pos, Move::Normal(NormalMove(position, pos)), true);
-        }
+    for (&color, &position, mut moves, move_gen) in pieces {
+        move_gen.generate(&mut commands, &mut moves, &board, position, color, piece_colors, true, true);
     }
 }
