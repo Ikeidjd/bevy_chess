@@ -7,13 +7,14 @@ pub mod sliding_moves;
 pub mod castling_moves;
 pub mod pawn_moves;
 pub mod promotion;
+pub mod checks;
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct Moves {
     pub positions: HashMap<Position, Move>,
     pub black_circles: Vec<Entity>,
-    pub mmove: Handle<Image>,
-    pub capture: Handle<Image>,
+    pub mmove: Option<Handle<Image>>,
+    pub capture: Option<Handle<Image>>,
 }
 
 impl Moves {
@@ -21,8 +22,17 @@ impl Moves {
         Self {
             positions: HashMap::new(),
             black_circles: Vec::new(),
-            mmove: asset_server.load("move_indicator.png"),
-            capture: asset_server.load("capture_indicator.png"),
+            mmove: Some(asset_server.load("move_indicator.png")),
+            capture: Some(asset_server.load("capture_indicator.png")),
+        }
+    }
+
+    pub fn new_no_move_indicators() -> Self {
+        Self {
+            positions: HashMap::new(),
+            black_circles: Vec::new(),
+            mmove: None,
+            capture: None,
         }
     }
 
@@ -30,13 +40,20 @@ impl Moves {
         if !self.positions.contains_key(&position) {
             self.positions.insert(position, mmove);
 
+            let image = match is_capture {
+                true => self.capture.clone(),
+                false => self.mmove.clone(),
+            };
+
+            let image = match image {
+                Some(image) => image,
+                None => return,
+            };
+
             self.black_circles.push(commands.spawn((
                 BlackCircle,
                 position,
-                Sprite::from(match is_capture {
-                    true => self.capture.clone(),
-                    false => self.mmove.clone(),
-                }),
+                Sprite::from(image),
                 Transform::from_xyz(0.0, 0.0, layers::BLACK_CIRCLES),
             )).id());
         }
@@ -79,7 +96,19 @@ pub struct BlackCircle;
 pub struct GenerateMovesEvent;
 
 #[derive(Event, Clone)]
-pub struct PieceMovedEvent(pub Move);
+pub struct PieceMovedEvent {
+    pub mmove: Move,
+    pub is_real: bool, // Moves done to check for illegal moves aren't real; they shouldn't add a HasMoved component or start an animation
+}
+
+impl PieceMovedEvent {
+    pub fn new(mmove: Move, is_real: bool) -> Self {
+        Self {
+            mmove,
+            is_real,
+        }
+    }
+}
 
 #[derive(Event)]
 pub struct PieceAnimationStartedEvent(pub Entity, pub Position, pub Position);
@@ -88,17 +117,19 @@ pub struct PieceAnimationStartedEvent(pub Entity, pub Position, pub Position);
 pub struct MoveFullyEndedEvent;
 
 pub fn on_piece_moved(event: On<PieceMovedEvent>, mut commands: Commands, mut board: Single<(&mut Board, &mut BoardChanges)>, mut pieces: Query<Entity, With<Piece>>) {
-    match event.0 {
+    match event.mmove {
         Move::Normal(NormalMove(from, to)) => {
             let (ref mut board, ref mut board_changes) = *board;
             let piece = pieces.get_mut(board[from]).unwrap();
+            board.do_move(&mut commands, board_changes, piece, from, to, event.is_real);
 
-            commands.trigger(PieceAnimationStartedEvent(piece, from, to));
-            board.do_move(&mut commands, board_changes, piece, from, to);
+            if event.is_real {
+                commands.trigger(PieceAnimationStartedEvent(piece, from, to));
+            }
         }
         Move::Castle(normal_move_a, normal_move_b) => {
-            commands.trigger(PieceMovedEvent(Move::Normal(normal_move_a)));
-            commands.trigger(PieceMovedEvent(Move::Normal(normal_move_b)));
+            commands.trigger(PieceMovedEvent::new(Move::Normal(normal_move_a), event.is_real));
+            commands.trigger(PieceMovedEvent::new(Move::Normal(normal_move_b), event.is_real));
         }
     }
 

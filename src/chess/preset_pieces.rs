@@ -1,6 +1,6 @@
 use bevy::{platform::collections::HashSet, prelude::*};
 
-use crate::chess::{direction::Direction, moves::{CaptureGenerator, castling_moves::{CastleBottom, CastleTop}, pawn_moves::PawnMoveGenerator, promotion::PromotingPiece, single_moves::SingleMoveGenerator, sliding_moves::SlidingMoveGenerator}};
+use crate::chess::{direction::Direction, moves::{CaptureGenerator, castling_moves::{CastleBottom, CastleTop}, checks::CheckDetector, pawn_moves::PawnMoveGenerator, promotion::PromotingPiece, single_moves::SingleMoveGenerator, sliding_moves::SlidingMoveGenerator}};
 
 pub fn pawn(drank: isize) -> impl Bundle {
     (
@@ -41,5 +41,6 @@ pub fn king() -> impl Bundle {
     (
         SingleMoveGenerator(HashSet::from(Direction::MONARCH)),
         CastleTop,
+        CheckDetector,
     )
 }

@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{CursorWorldCoordinates, chess::{PIECE_SIZE, moves::{GenerateMovesEvent, Moves}, position::Position}};
+use crate::{CursorWorldCoordinates, chess::{PIECE_SIZE, moves::{GenerateMovesEvent, Moves, checks::CheckIllegalMovesEvent}, position::Position}};
 
 #[derive(Component)]
 pub struct Piece;
@@ -49,7 +49,7 @@ pub fn on_piece_deselected(_event: On<PieceDeselectedEvent>, mut commands: Comma
     commands.trigger(StopFollowingCursorEvent(selected_piece_entity));
 }
 
-pub fn on_piece_selected(event: On<PieceSelectedEvent>, mut commands: Commands, asset_server: Res<AssetServer>, pieces: Query<(Entity, &Position), With<Piece>>) {
+pub fn on_piece_selected(event: On<PieceSelectedEvent>, mut commands: Commands, pieces: Query<(Entity, &Position), With<Piece>>) {
     let (piece, &position) = match pieces.get(event.0) {
         Ok(piece) => piece,
         Err(_) => return,
@@ -62,11 +62,12 @@ pub fn on_piece_selected(event: On<PieceSelectedEvent>, mut commands: Commands, 
 
     commands.entity(piece).insert((
         SelectedPiece { yellow_square },
-        Moves::new(&asset_server),
+        Moves::new_no_move_indicators(), // When illegal moves are checked, the ones that aren't illegal get added to a new Moves component with move indicators
     ));
 
     commands.trigger(StartFollowingCursorEvent(piece));
     commands.trigger(GenerateMovesEvent);
+    commands.trigger(CheckIllegalMovesEvent);
 }
 
 pub fn piece_follow_cursor(cursor: Res<CursorWorldCoordinates>, mut piece: Single<&mut Transform, With<PieceFollowsCursor>>) {

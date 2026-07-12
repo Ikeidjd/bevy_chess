@@ -18,19 +18,23 @@ impl Board {
         }
     }
 
-    pub fn do_move(&mut self, commands: &mut Commands, board_changes: &mut BoardChanges, piece: Entity, from: Position, to: Position) {
+    pub fn do_move(&mut self, commands: &mut Commands, board_changes: &mut BoardChanges, piece: Entity, from: Position, to: Position, is_real: bool) {
         board_changes.changes.push((from, self[from]));
         board_changes.changes.push((to, self[to]));
 
         if !self.is_empty(to) {
             board_changes.to_despawn.push(self[to]);
-            commands.entity(self[to]).insert(Visibility::Hidden);
+            commands.entity(self[to]).insert((Captured, Visibility::Hidden));
         }
 
         self[to] = piece;
         self[from] = self.empty_piece;
 
-        commands.entity(piece).insert((to, HasMoved));
+        commands.entity(piece).insert(to);
+
+        if is_real {
+            commands.entity(piece).insert(HasMoved);
+        }
     }
 
     pub fn restore_changes(&mut self, commands: &mut Commands, board_changes: &mut BoardChanges) {
@@ -38,7 +42,7 @@ impl Board {
 
         for (position, piece) in changes.into_iter().rev() {
             self[position] = piece;
-            commands.entity(piece).insert((position, Visibility::Visible));
+            commands.entity(piece).insert((position, Visibility::Visible)).remove::<Captured>();
         }
     }
 
@@ -88,11 +92,17 @@ impl BoardChanges {
     }
 }
 
+#[derive(Component)]
+pub struct Captured;
+
 #[derive(Event)]
 pub struct BoardPressedEvent(pub Position);
 
 #[derive(Event)]
 pub struct BoardReleasedEvent(pub Position);
+
+#[derive(Event)]
+pub struct RestoreBoardEvent;
 
 pub fn check_board_clicked(mut commands: Commands, input: Res<ButtonInput<MouseButton>>, cursor: Res<CursorWorldCoordinates>) {
     let cursor = Position::from_translation(cursor.0);
@@ -119,11 +129,16 @@ pub fn on_board_released(event: On<BoardReleasedEvent>, mut commands: Commands, 
     if let Ok((selected_piece_entity, moves)) = selected_piece.single() {
         match moves.positions.get(&event.0) {
             Some(&mmove) => {
-                commands.trigger(PieceMovedEvent(mmove));
+                commands.trigger(PieceMovedEvent::new(mmove, true));
             }
             None => {
                 commands.trigger(StopFollowingCursorEvent(selected_piece_entity));
             }
         }
     }
+}
+
+pub fn restore_board(_event: On<RestoreBoardEvent>, mut commands: Commands, mut board: Single<(&mut Board, &mut BoardChanges)>) {
+    let (ref mut board, ref mut board_changes) = *board;
+    board.restore_changes(&mut commands, board_changes);
 }
