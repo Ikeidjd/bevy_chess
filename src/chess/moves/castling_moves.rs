@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::chess::{board::Board, moves::{GenerateMovesEvent, HasMoved, Move, Moves, NormalMove}, piece::{Piece, PieceColor, SelectedPiece}, position::Position};
+use crate::chess::{board::Board, moves::moves::{GenerateMovesEvent, HasMoved, Move, MoveType, Moves, NormalMove}, piece::{Piece, PieceColor, SelectedPiece}, position::Position};
 
 #[derive(Component)]
 pub struct CastleTop;
@@ -27,7 +27,10 @@ pub fn generate_castling_moves(_event: On<GenerateMovesEvent>, mut commands: Com
         }
 
         if board.is_in_bounds(pos) && board[pos] == bottom {
-            moves.insert(&mut commands, position + dir * 2, Move::Castle(NormalMove(position, position + dir * 2), NormalMove(bottom_position, position + dir)), false);
+            moves.insert(&mut commands, position + dir * 2, Move {
+                move_type: MoveType::Castle(NormalMove::new(position, position + dir * 2), NormalMove::new(bottom_position, position + dir)),
+                capture: None,
+            });
         }
     }
 }

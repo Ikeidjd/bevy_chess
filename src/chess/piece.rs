@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{CursorWorldCoordinates, chess::{PIECE_SIZE, moves::{GenerateMovesEvent, Moves, checks::CheckIllegalMovesEvent}, position::Position}};
+use crate::{CursorWorldCoordinates, chess::{PIECE_SIZE, moves::{checks::CheckIllegalMovesEvent, moves::{GenerateMovesEvent, Moves}}, position::Position}};
 
 #[derive(Component)]
 pub struct Piece;

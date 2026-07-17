@@ -535,6 +535,7 @@ name = "bevy_chess"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bevy_dylib",
 ]
 
 [[package]]

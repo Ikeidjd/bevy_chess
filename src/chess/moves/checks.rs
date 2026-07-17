@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::chess::{board::{Board, Captured, RestoreBoardEvent}, moves::{GenerateMovesEvent, Moves, PieceMovedEvent}, piece::{Piece, PieceColor, SelectedPiece}, position::Position};
+use crate::chess::{board::{Captured, RestoreBoardEvent}, moves::moves::{GenerateMovesEvent, Moves, PieceMovedEvent}, piece::{Piece, PieceColor, SelectedPiece}, position::Position};
 
 #[derive(Component)]
 pub struct CheckDetector;
@@ -56,12 +56,7 @@ impl Command for CheckIllegalMoves {
                 continue;
             }
 
-            let is_capture = {
-                let board = world.query::<&Board>().single(world).unwrap();
-                !board.is_empty(position)
-            };
-
-            new_moves.insert(&mut world.commands(), position, mmove, is_capture);
+            new_moves.insert(&mut world.commands(), position, mmove);
         }
 
         world.entity_mut(self.moving_piece).insert(new_moves);

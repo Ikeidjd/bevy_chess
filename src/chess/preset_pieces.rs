@@ -1,11 +1,15 @@
+use std::marker::PhantomData;
+
 use bevy::{platform::collections::HashSet, prelude::*};
 
-use crate::chess::{direction::Direction, moves::{CaptureGenerator, castling_moves::{CastleBottom, CastleTop}, checks::CheckDetector, pawn_moves::PawnMoveGenerator, promotion::PromotingPiece, single_moves::SingleMoveGenerator, sliding_moves::SlidingMoveGenerator}};
+use crate::chess::{direction::Direction, moves::{castling_moves::{CastleBottom, CastleTop}, checks::CheckDetector, move_generator::{CaptureMarker, CaptureOnly, MoveOnly}, pawn_moves::{DoublePawnMoveGenerator, EnPassantMarker}, promotion::PromotingPiece, single_moves::SingleMoveGenerator, sliding_moves::SlidingMoveGenerator}};
 
 pub fn pawn(drank: isize) -> impl Bundle {
     (
-        PawnMoveGenerator(Direction::new(drank, 0)),
-        CaptureGenerator(SingleMoveGenerator(HashSet::from([Direction::new(drank, -1), Direction::new(drank, 1)]))),
+        DoublePawnMoveGenerator(Direction::new(drank, 0)),
+        MoveOnly(SingleMoveGenerator(HashSet::from([Direction::new(drank, 0)]))),
+        CaptureOnly(SingleMoveGenerator(HashSet::from([Direction::new(drank, -1), Direction::new(drank, 1)]))),
+        CaptureMarker(SingleMoveGenerator(HashSet::from([Direction::new(drank, -1), Direction::new(drank, 1)])), PhantomData::<EnPassantMarker>),
         PromotingPiece,
     )
 }

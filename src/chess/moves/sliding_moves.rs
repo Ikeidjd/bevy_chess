@@ -1,11 +1,11 @@
-use bevy::{ecs::query::QueryFilter, platform::collections::HashSet, prelude::*};
+use bevy::{ecs::query::QueryFilter, platform::collections::{HashMap, HashSet}, prelude::*};
 
-use crate::chess::{board::Board, direction::Direction, moves::{CaptureGenerator, GenerateMovesEvent, Move, MoveGenerator, Moves, NormalMove}, piece::{Piece, PieceColor}, position::Position};
+use crate::chess::{board::Board, direction::Direction, moves::{move_generator::{MoveGenerator, move_generator_plugin}, moves::{Move, MoveType, Moves, NormalMove}}, piece::PieceColor, position::Position};
 
 #[derive(Component, Clone)]
 pub struct SlidingMoveGenerator(pub HashSet<Direction>);
 
-impl SlidingMoveGenerator {
+impl MoveGenerator for SlidingMoveGenerator {
     fn generate<F: QueryFilter>(&self, commands: &mut Commands, moves: &mut Moves, board: &Board, position: Position, color: PieceColor, piece_colors: Query<&PieceColor, F>,
         allow_moves: bool, allow_captures: bool) {
 
@@ -14,39 +14,42 @@ impl SlidingMoveGenerator {
 
             while board.is_empty(pos) {
                 if allow_moves {
-                    moves.insert(commands, pos, Move::Normal(NormalMove(position, pos)), false);
+                    moves.insert(commands, pos, Move {
+                        move_type: MoveType::Normal(NormalMove::new(position, pos)),
+                        capture: None,
+                    });
                 }
 
                 pos += dir;
             }
 
             if allow_captures && board.is_enemy(pos, color, piece_colors) {
-                moves.insert(commands, pos, Move::Normal(NormalMove(position, pos)), true);
+                moves.insert(commands, pos, Move {
+                    move_type: MoveType::Normal(NormalMove::new(position, pos)),
+                    capture: Some(pos),
+                });
+            }
+        }
+    }
+
+    fn generate_marker_captures<F: QueryFilter>(&self, commands: &mut Commands, moves: &mut Moves, board: &Board, position: Position, color: PieceColor,
+        piece_colors: Query<&PieceColor, F>, marker_to_piece: HashMap<Position, Position>) {
+
+        for &dir in &self.0 {
+            let mut pos = position + dir;
+
+            while board.is_empty(pos) {
+                if let Some(&piece_pos) = marker_to_piece.get(&pos) && board.is_enemy(piece_pos, color, piece_colors) {
+                    moves.insert(commands, pos, Move {
+                        move_type: MoveType::Normal(NormalMove::new(position, pos)),
+                        capture: Some(piece_pos),
+                    });
+                }
+
+                pos += dir;
             }
         }
     }
 }
 
-pub fn generate_sliding_moves(_event: On<GenerateMovesEvent>, mut commands: Commands, board: Single<&Board>,
-    pieces: Query<(&PieceColor, &Position, &mut Moves, &MoveGenerator<SlidingMoveGenerator>), With<Piece>>, piece_colors: Query<&PieceColor, With<Piece>>) {
-
-    for (&color, &position, mut moves, MoveGenerator(move_gen)) in pieces {
-        move_gen.generate(&mut commands, &mut moves, &board, position, color, piece_colors, true, false);
-    }
-}
-
-pub fn generate_sliding_captures(_event: On<GenerateMovesEvent>, mut commands: Commands, board: Single<&Board>,
-    pieces: Query<(&PieceColor, &Position, &mut Moves, &CaptureGenerator<SlidingMoveGenerator>), With<Piece>>, piece_colors: Query<&PieceColor, With<Piece>>) {
-
-    for (&color, &position, mut moves, CaptureGenerator(move_gen)) in pieces {
-        move_gen.generate(&mut commands, &mut moves, &board, position, color, piece_colors, false, true);
-    }
-}
-
-pub fn generate_sliding_moves_and_captures(_event: On<GenerateMovesEvent>, mut commands: Commands, board: Single<&Board>,
-    pieces: Query<(&PieceColor, &Position, &mut Moves, &SlidingMoveGenerator), With<Piece>>, piece_colors: Query<&PieceColor, With<Piece>>) {
-
-    for (&color, &position, mut moves, move_gen) in pieces {
-        move_gen.generate(&mut commands, &mut moves, &board, position, color, piece_colors, true, true);
-    }
-}
+move_generator_plugin!(SlidingMoveGeneratorPlugin, SlidingMoveGenerator);

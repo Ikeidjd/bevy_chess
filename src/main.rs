@@ -1,6 +1,6 @@
 use bevy::{camera::ScalingMode, input::keyboard::Key, prelude::*, window::{PrimaryWindow, WindowMode}};
 
-use crate::chess::ChessPlugin;
+use crate::chess::plugin::ChessPlugin;
 
 pub mod layers;
 mod chess;
@@ -25,7 +25,7 @@ fn main() {
         .run();
 }
 
-#[derive(States, Default, Debug, Hash, PartialEq, Eq, Clone, Copy)]
+#[derive(States, Debug, Default, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum MainState {
     #[default]
     Chess,

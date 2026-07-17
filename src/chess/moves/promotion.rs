@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{CursorWorldCoordinates, chess::{BOARD_LENGTH, ChessState, PIECE_SIZE, board::{Board, BoardChanges}, direction::Direction, moves::MoveFullyEndedEvent, piece::{Piece, PieceColor}, position::{Position, SyncTransformWithPosition}, preset_pieces::{bishop, knight, queen, rook}, setup::spawn_piece}, layers};
+use crate::{CursorWorldCoordinates, chess::{BOARD_LENGTH, ChessState, PIECE_SIZE, board::{Board, BoardChanges}, direction::Direction, moves::moves::MoveFullyEndedEvent, piece::{Piece, PieceColor}, position::{Position, SyncTransformWithPosition}, preset_pieces::{bishop, knight, queen, rook}, setup::spawn_piece}, layers};
 
 #[derive(Component)]
 pub struct PromotingPiece;

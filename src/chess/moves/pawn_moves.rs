@@ -1,32 +1,35 @@
 use bevy::prelude::*;
 
-use crate::chess::{board::Board, direction::Direction, moves::{GenerateMovesEvent, HasMoved, Move, Moves, NormalMove}, piece::Piece, position::Position};
+use crate::chess::{board::Board, direction::Direction, moves::{move_generator::{PieceMarker, PieceMarkerRequire}, moves::{GenerateMovesEvent, HasMoved, Move, MoveType, Moves, NormalMove}}, piece::Piece, position::Position};
 
 #[derive(Component, Clone, Copy)]
-pub struct PawnMoveGenerator(pub Direction);
+pub struct DoublePawnMoveGenerator(pub Direction);
+
+#[derive(Component, Clone, Copy)]
+#[require(PieceMarkerRequire)]
+pub struct EnPassantMarker(pub Entity);
+
+impl PieceMarker for EnPassantMarker {
+    fn get_entity(&self) -> Entity {
+        self.0
+    }
+}
 
 pub fn generate_pawn_moves(_event: On<GenerateMovesEvent>, mut commands: Commands, board: Single<&Board>,
-    pieces: Query<(Entity, &Position, &mut Moves, &PawnMoveGenerator), With<Piece>>, has_moved: Query<(), With<HasMoved>>) {
+    pieces: Query<(Entity, &Position, &mut Moves, &DoublePawnMoveGenerator), With<Piece>>, has_moved: Query<(), With<HasMoved>>) {
 
     for (piece, &position, mut moves, move_gen) in pieces {
-        let &PawnMoveGenerator(direction) = move_gen;
+        let &DoublePawnMoveGenerator(direction) = move_gen;
 
-        let mut pos = position + direction;
+        let pos = position + direction * 2;
 
-        if !board.is_empty(pos) {
+        if has_moved.get(piece).is_ok() || !board.is_empty(position + direction) || !board.is_empty(pos) {
             continue;
         }
 
-        moves.insert(&mut commands, pos, Move::Normal(NormalMove(position, pos)), false);
-
-        if has_moved.get(piece).is_ok() {
-            continue;
-        }
-
-        pos += direction;
-
-        if board.is_empty(pos) {
-            moves.insert(&mut commands, pos, Move::Normal(NormalMove(position, pos)), false);
-        }
+        moves.insert(&mut commands, pos, Move {
+            move_type: MoveType::DoublePawn(NormalMove::new(position, pos)),
+            capture: None,
+        });
     }
 }
