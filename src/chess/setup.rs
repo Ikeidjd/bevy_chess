@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::{chess::{BOARD_LENGTH, board::{Board, BoardChanges}, markers::MarkerBoard, piece::{EmptyPiece, Piece, PieceColor}, position::Position, preset_pieces::{bishop, black_pawn, king, knight, queen, rook, white_pawn}}, layers};
 
-pub fn spawn_piece(commands: &mut Commands, asset_server: &AssetServer, color: PieceColor, position: Position, texture_path: impl ToString, extra: impl Bundle) -> Entity {
+pub (crate) fn spawn_piece(commands: &mut Commands, asset_server: &AssetServer, color: PieceColor, position: Position, texture_path: impl ToString, extra: impl Bundle) -> Entity {
     let mut piece = commands.spawn((
         Piece,
         color,
@@ -14,7 +14,7 @@ pub fn spawn_piece(commands: &mut Commands, asset_server: &AssetServer, color: P
     piece.insert(extra).id()
 }
 
-pub fn spawn_board(mut commands: Commands, asset_server: Res<AssetServer>) {
+pub (crate) fn spawn_board(mut commands: Commands, asset_server: Res<AssetServer>) {
     let empty_piece = commands.spawn(EmptyPiece).id();
 
     let mut pieces = vec![empty_piece];
@@ -51,7 +51,7 @@ pub fn spawn_board(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn(MarkerBoard::default());
 }
 
-pub fn sync_pieces_with_board(pieces: Query<(Entity, &Position), With<Piece>>, mut board: Single<&mut Board>) {
+pub (crate) fn sync_pieces_with_board(pieces: Query<(Entity, &Position), With<Piece>>, mut board: Single<&mut Board>) {
     for (piece, &position) in &pieces {
         board[position] = piece;
     }

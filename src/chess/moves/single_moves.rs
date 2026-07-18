@@ -3,7 +3,7 @@ use bevy::{ecs::query::QueryFilter, platform::collections::{HashMap, HashSet}, p
 use crate::chess::{board::Board, direction::Direction, moves::{move_generator::{MoveGenerator, move_generator_plugin}, moves::{Move, MoveType, Moves, NormalMove}}, piece::PieceColor, position::Position};
 
 #[derive(Component, Clone)]
-pub struct SingleMoveGenerator(pub HashSet<Direction>);
+pub (crate) struct SingleMoveGenerator(pub (crate) HashSet<Direction>);
 
 impl MoveGenerator for SingleMoveGenerator {
     fn generate<F: QueryFilter>(&self, commands: &mut Commands, moves: &mut Moves, board: &Board, position: Position, color: PieceColor, piece_colors: Query<&PieceColor, F>,

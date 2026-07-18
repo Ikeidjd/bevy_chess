@@ -2,7 +2,7 @@ use bevy::{camera::ScalingMode, input::keyboard::Key, prelude::*, window::{Prima
 
 use crate::chess::plugin::ChessPlugin;
 
-pub mod layers;
+pub (crate) mod layers;
 mod chess;
 
 const WINDOW_SIZE: Vec2 = vec2(16.0 / 9.0 * 540.0, 540.0);
@@ -26,13 +26,13 @@ fn main() {
 }
 
 #[derive(States, Debug, Default, Hash, PartialEq, Eq, Clone, Copy)]
-pub enum MainState {
+pub (crate) enum MainState {
     #[default]
     Chess,
 }
 
 #[derive(Resource, Default)]
-pub struct CursorWorldCoordinates(Vec2);
+pub (crate) struct CursorWorldCoordinates(Vec2);
 
 fn spawn_camera(mut commands: Commands) {
     commands.spawn((Camera2d, Projection::Orthographic(OrthographicProjection {

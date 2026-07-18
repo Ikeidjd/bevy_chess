@@ -1,21 +1,23 @@
 use bevy::{input::keyboard::Key, prelude::*};
 
 #[derive(Component, Default, Clone)]
-pub struct MarkerBoard {
-    pub current: Vec<Entity>,
-    pub future: Vec<Entity>,
+pub (crate) struct MarkerBoard {
+    pub (crate) past: Vec<Entity>,
+    pub (crate) current: Vec<Entity>,
+    pub (crate) future: Vec<Entity>,
 }
 
 impl MarkerBoard {
-    pub fn insert(&mut self, marker: Entity) {
+    pub (crate) fn insert(&mut self, marker: Entity) {
         self.future.push(marker);
     }
 
-    pub fn advance_move(&mut self) {
-        self.current = std::mem::take(&mut self.future);
+    pub (crate) fn advance_move(&mut self) {
+        self.past = std::mem::replace(&mut self.current, std::mem::take(&mut self.future));
     }
 
-    pub fn remove_future_markers(&mut self) {
+    pub (crate) fn restore_previous(&mut self) {
+        self.current = std::mem::take(&mut self.past);
         self.future.clear();
     }
 }
@@ -23,18 +25,38 @@ impl MarkerBoard {
 
 // A PieceMarker is used to signal that a piece can be captured from a position other than its own
 // This is used for double pawn moves (en passant) and castling (the king can't move out of or through check, i.e., it can be captured even though that is not its position)
-pub trait PieceMarker {
+pub (crate) trait PieceMarker {
     fn get_entity(&self) -> Entity;
 }
 
 // Used for despawning markers
 // Make every component that implements PieceMarker #require this or bad things will happen
 #[derive(Component)]
-pub struct PieceMarkerRequire {
-    pub sprite_name: &'static str,
+pub (crate) struct PieceMarkerRequire {
+    pub (crate) sprite_name: &'static str,
 }
 
-pub struct MarkerVisibilityPlugin;
+#[derive(Component, Clone, Copy)]
+#[require(PieceMarkerRequire { sprite_name: "en_passant_marker.png" })]
+pub (crate) struct EnPassantMarker(pub (crate) Entity);
+
+impl PieceMarker for EnPassantMarker {
+    fn get_entity(&self) -> Entity {
+        self.0
+    }
+}
+
+#[derive(Component, Clone, Copy)]
+#[require(PieceMarkerRequire { sprite_name: "castle_marker.png" })]
+pub (crate) struct CastleMarker(pub (crate) Entity);
+
+impl PieceMarker for CastleMarker {
+    fn get_entity(&self) -> Entity {
+        self.0
+    }
+}
+
+pub (crate) struct MarkerVisibilityPlugin;
 
 impl Plugin for MarkerVisibilityPlugin {
     fn build(&self, app: &mut App) {
@@ -77,7 +99,11 @@ fn update_marker_visibilities(marker_board: Single<&MarkerBoard>, state: Res<Sta
     }
 
     for &marker in &marker_board.current {
-        let mut visibility = marker_visibilities.get_mut(marker).unwrap();
+        let mut visibility = match marker_visibilities.get_mut(marker) {
+            Ok(visibility) => visibility,
+            Err(_) => continue,
+        };
+
         *visibility = Visibility::Visible;
     }
 }

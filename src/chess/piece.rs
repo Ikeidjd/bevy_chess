@@ -1,42 +1,45 @@
+use std::marker::PhantomData;
+
 use bevy::prelude::*;
 
-use crate::{CursorWorldCoordinates, chess::{PIECE_SIZE, moves::{checks::CheckIllegalMovesEvent, moves::{GenerateMovesEvent, Moves}}, position::Position}};
+use crate::{CursorWorldCoordinates, chess::{PIECE_SIZE, markers::CastleMarker, moves::{checks::CheckIllegalMovesEvent, move_generator::CapturesMarkersAlways, moves::{GenerateMovesEvent, Moves}}, position::Position}};
 
 #[derive(Component)]
-pub struct Piece;
+#[require(CapturesMarkersAlways::<CastleMarker>(PhantomData))]
+pub (crate) struct Piece;
 
 #[derive(Component, PartialEq, Eq, Clone, Copy)]
-pub enum PieceColor {
+pub (crate) enum PieceColor {
     White,
     Black,
 }
 
 #[derive(Component)]
-pub struct SelectedPiece { pub yellow_square: Entity }
+pub (crate) struct SelectedPiece { pub (crate) yellow_square: Entity }
 
 #[derive(Component)]
-pub struct EmptyPiece;
+pub (crate) struct EmptyPiece;
 
 #[derive(Component)]
 #[require(Sprite::from_color(Color::srgba(1.0, 1.0, 0.0, 0.5), vec2(PIECE_SIZE, PIECE_SIZE)))]
-pub struct YellowSquare;
+pub (crate) struct YellowSquare;
 
 #[derive(Component)]
-pub struct PieceFollowsCursor;
+pub (crate) struct PieceFollowsCursor;
 
 #[derive(Event)]
-pub struct PieceSelectedEvent(pub Entity);
+pub (crate) struct PieceSelectedEvent(pub (crate) Entity);
 
 #[derive(Event)]
-pub struct PieceDeselectedEvent;
+pub (crate) struct PieceDeselectedEvent;
 
 #[derive(Event)]
-pub struct StartFollowingCursorEvent(pub Entity);
+pub (crate) struct StartFollowingCursorEvent(pub (crate) Entity);
 
 #[derive(Event)]
-pub struct StopFollowingCursorEvent(pub Entity);
+pub (crate) struct StopFollowingCursorEvent(pub (crate) Entity);
 
-pub fn on_piece_deselected(_event: On<PieceDeselectedEvent>, mut commands: Commands, selected_piece: Single<(Entity, &SelectedPiece, &Moves), With<Piece>>) {
+pub (crate) fn on_piece_deselected(_event: On<PieceDeselectedEvent>, mut commands: Commands, selected_piece: Single<(Entity, &SelectedPiece, &Moves), With<Piece>>) {
     let (selected_piece_entity, selected_piece, moves) = *selected_piece;
 
     commands.entity(selected_piece.yellow_square).despawn();
@@ -49,7 +52,7 @@ pub fn on_piece_deselected(_event: On<PieceDeselectedEvent>, mut commands: Comma
     commands.trigger(StopFollowingCursorEvent(selected_piece_entity));
 }
 
-pub fn on_piece_selected(event: On<PieceSelectedEvent>, mut commands: Commands, pieces: Query<(Entity, &Position), With<Piece>>) {
+pub (crate) fn on_piece_selected(event: On<PieceSelectedEvent>, mut commands: Commands, pieces: Query<(Entity, &Position), With<Piece>>) {
     let (piece, &position) = match pieces.get(event.0) {
         Ok(piece) => piece,
         Err(_) => return,
@@ -70,19 +73,19 @@ pub fn on_piece_selected(event: On<PieceSelectedEvent>, mut commands: Commands, 
     commands.trigger(CheckIllegalMovesEvent);
 }
 
-pub fn piece_follow_cursor(cursor: Res<CursorWorldCoordinates>, mut piece: Single<&mut Transform, With<PieceFollowsCursor>>) {
+pub (crate) fn piece_follow_cursor(cursor: Res<CursorWorldCoordinates>, mut piece: Single<&mut Transform, With<PieceFollowsCursor>>) {
     piece.translation.x = cursor.0.x;
     piece.translation.y = cursor.0.y;
 }
 
-pub fn start_following_cursor(event: On<StartFollowingCursorEvent>, mut commands: Commands, mut pieces: Query<&mut Transform, Without<PieceFollowsCursor>>) {
+pub (crate) fn start_following_cursor(event: On<StartFollowingCursorEvent>, mut commands: Commands, mut pieces: Query<&mut Transform, Without<PieceFollowsCursor>>) {
     if let Ok(mut transform) = pieces.get_mut(event.0) {
         transform.translation.z += 0.1;
         commands.entity(event.0).insert(PieceFollowsCursor);
     }
 }
 
-pub fn stop_following_cursor(event: On<StopFollowingCursorEvent>, mut commands: Commands, mut pieces: Query<&mut Transform, With<PieceFollowsCursor>>) {
+pub (crate) fn stop_following_cursor(event: On<StopFollowingCursorEvent>, mut commands: Commands, mut pieces: Query<&mut Transform, With<PieceFollowsCursor>>) {
     if let Ok(mut transform) = pieces.get_mut(event.0) {
         transform.translation.z -= 0.1;
         commands.entity(event.0).remove::<PieceFollowsCursor>();

@@ -1,21 +1,11 @@
 use bevy::prelude::*;
 
-use crate::chess::{board::Board, direction::Direction, markers::{PieceMarker, PieceMarkerRequire}, moves::moves::{GenerateMovesEvent, HasMoved, Move, MoveType, Moves, NormalMove}, piece::Piece, position::Position};
+use crate::chess::{board::Board, direction::Direction, moves::moves::{GenerateMovesEvent, HasMoved, Move, MoveType, Moves, NormalMove}, piece::Piece, position::Position};
 
 #[derive(Component, Clone, Copy)]
-pub struct DoublePawnMoveGenerator(pub Direction);
+pub (crate) struct DoublePawnMoveGenerator(pub (crate) Direction);
 
-#[derive(Component, Clone, Copy)]
-#[require(PieceMarkerRequire { sprite_name: "en_passant_marker.png" })]
-pub struct EnPassantMarker(pub Entity);
-
-impl PieceMarker for EnPassantMarker {
-    fn get_entity(&self) -> Entity {
-        self.0
-    }
-}
-
-pub fn generate_pawn_moves(_event: On<GenerateMovesEvent>, mut commands: Commands, board: Single<&Board>,
+pub (crate) fn generate_pawn_moves(_event: On<GenerateMovesEvent>, mut commands: Commands, board: Single<&Board>,
     pieces: Query<(Entity, &Position, &mut Moves, &DoublePawnMoveGenerator), With<Piece>>, has_moved: Query<(), With<HasMoved>>) {
 
     for (piece, &position, mut moves, move_gen) in pieces {

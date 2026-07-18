@@ -3,7 +3,7 @@ use bevy::{ecs::query::QueryFilter, platform::collections::{HashMap, HashSet}, p
 use crate::chess::{board::Board, direction::Direction, moves::{move_generator::{MoveGenerator, move_generator_plugin}, moves::{Move, MoveType, Moves, NormalMove}}, piece::PieceColor, position::Position};
 
 #[derive(Component, Clone)]
-pub struct SlidingMoveGenerator(pub HashSet<Direction>);
+pub (crate) struct SlidingMoveGenerator(pub (crate) HashSet<Direction>);
 
 impl MoveGenerator for SlidingMoveGenerator {
     fn generate<F: QueryFilter>(&self, commands: &mut Commands, moves: &mut Moves, board: &Board, position: Position, color: PieceColor, piece_colors: Query<&PieceColor, F>,
@@ -38,12 +38,16 @@ impl MoveGenerator for SlidingMoveGenerator {
         for &dir in &self.0 {
             let mut pos = position + dir;
 
-            while board.is_empty(pos) {
+            loop {
                 if let Some(&piece_pos) = marker_to_piece.get(&pos) && board.is_enemy(piece_pos, color, piece_colors) {
                     moves.insert(commands, pos, Move {
                         move_type: MoveType::Normal(NormalMove::new(position, pos)),
                         capture: Some(piece_pos),
                     });
+                }
+
+                if !board.is_empty(pos) {
+                    break;
                 }
 
                 pos += dir;

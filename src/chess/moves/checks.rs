@@ -3,10 +3,10 @@ use bevy::prelude::*;
 use crate::chess::{board::{Captured, RestoreBoardEvent}, moves::moves::{GenerateMovesEvent, Moves, PieceMovedEvent}, piece::{Piece, PieceColor, SelectedPiece}, position::Position};
 
 #[derive(Component)]
-pub struct CheckDetector;
+pub (crate) struct CheckDetector;
 
 #[derive(Event)]
-pub struct CheckIllegalMovesEvent;
+pub (crate) struct CheckIllegalMovesEvent;
 
 struct CheckIllegalMoves {
     moving_piece: Entity,
@@ -25,7 +25,7 @@ impl Command for CheckIllegalMoves {
         };
 
         for (position, mmove) in moves.positions {
-            world.trigger(PieceMovedEvent::new(mmove, false));
+            world.trigger(PieceMovedEvent::new(mmove, false, true));
             world.flush();
 
             // If the move we're checking captures the piece, it shouldn't be considered
@@ -41,9 +41,18 @@ impl Command for CheckIllegalMoves {
                 let moves = world.get::<Moves>(enemy).unwrap();
 
                 for &check_detector in &self.check_detectors {
-                    if moves.positions.contains_key(world.get::<Position>(check_detector).unwrap()) {
-                        is_legal = false;
-                        break 'outer;
+                    let check_detector_position = world.get::<Position>(check_detector).unwrap().clone();
+
+                    for (&position, mmove) in &moves.positions {
+                        if position == check_detector_position {
+                            is_legal = false;
+                            break 'outer;
+                        }
+
+                        if let Some(capture) = mmove.capture && capture == check_detector_position {
+                            is_legal = false;
+                            break 'outer;
+                        }
                     }
                 }
 
@@ -63,7 +72,7 @@ impl Command for CheckIllegalMoves {
     }
 }
 
-pub fn check_illegal_moves(_event: On<CheckIllegalMovesEvent>, mut commands: Commands, piece: Single<(Entity, &PieceColor), (With<Piece>, With<SelectedPiece>, With<Moves>)>,
+pub (crate) fn check_illegal_moves(_event: On<CheckIllegalMovesEvent>, mut commands: Commands, piece: Single<(Entity, &PieceColor), (With<Piece>, With<SelectedPiece>, With<Moves>)>,
     check_detectors: Query<(Entity, &PieceColor), (With<Piece>, With<CheckDetector>)>, enemies: Query<(Entity, &PieceColor), With<Piece>>) {
 
     commands.queue(CheckIllegalMoves {

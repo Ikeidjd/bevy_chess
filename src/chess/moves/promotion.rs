@@ -3,18 +3,18 @@ use bevy::prelude::*;
 use crate::{CursorWorldCoordinates, chess::{BOARD_LENGTH, ChessState, PIECE_SIZE, board::{Board, BoardChanges}, direction::Direction, moves::moves::MoveFullyEndedEvent, piece::{Piece, PieceColor}, position::{Position, SyncTransformWithPosition}, preset_pieces::{bishop, knight, queen, rook}, setup::spawn_piece}, layers};
 
 #[derive(Component)]
-pub struct PromotingPiece;
+pub (crate) struct PromotingPiece;
 
 #[derive(Component)]
-pub struct PromotionOption(pub Entity);
+pub (crate) struct PromotionOption(pub (crate) Entity);
 
 #[derive(Component)]
-pub struct PromotionCancel;
+pub (crate) struct PromotionCancel;
 
 #[derive(Event)]
-pub struct AttemptPromotionEvent(pub Entity);
+pub (crate) struct AttemptPromotionEvent(pub (crate) Entity);
 
-pub fn attempt_promotion(event: On<AttemptPromotionEvent>, mut commands: Commands, mut next_state: ResMut<NextState<ChessState>>, asset_server: Res<AssetServer>,
+pub (crate) fn attempt_promotion(event: On<AttemptPromotionEvent>, mut commands: Commands, mut next_state: ResMut<NextState<ChessState>>, asset_server: Res<AssetServer>,
     pieces: Query<(&PieceColor, &Position), (With<Piece>, With<PromotingPiece>)>) {
 
     let (&piece_color, &position) = match pieces.get(event.0) {
@@ -74,7 +74,7 @@ pub fn attempt_promotion(event: On<AttemptPromotionEvent>, mut commands: Command
     next_state.set(ChessState::Promotion);
 }
 
-pub fn check_promotion_option_clicked(mut commands: Commands, mut next_state: ResMut<NextState<ChessState>>, cursor: Res<CursorWorldCoordinates>, input: Res<ButtonInput<MouseButton>>,
+pub (crate) fn check_promotion_option_clicked(mut commands: Commands, mut next_state: ResMut<NextState<ChessState>>, cursor: Res<CursorWorldCoordinates>, input: Res<ButtonInput<MouseButton>>,
     mut board: Single<(Entity, &mut Board, &mut BoardChanges)>, pieces: Query<(Entity, &Position, &Transform), (With<Piece>, With<PromotingPiece>)>,
     promotion_options: Query<(Entity, &Position, &PromotionOption)>, promotion_cancel_position: Single<&Position, With<PromotionCancel>>) {
 

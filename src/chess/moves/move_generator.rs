@@ -14,9 +14,9 @@ pub trait MoveGenerator {
     fn get_marker_to_piece<Marker: PieceMarker + Component + Copy, F: QueryFilter>(marker_board: &MarkerBoard, markers: Query<(&Marker, &Position), F>,
         piece_positions: Query<&Position, With<Piece>>) -> HashMap<Position, Position> {
 
-        marker_board.current.iter().map(|&marker_entity| match markers.get(marker_entity) {
-            Ok((&marker, &position)) => (position, piece_positions.get(marker.get_entity()).unwrap().clone()),
-            Err(_) => unreachable!(),
+        marker_board.current.iter().filter_map(|&marker_entity| match markers.get(marker_entity) {
+            Ok((&marker, &position)) => Some((position, piece_positions.get(marker.get_entity()).unwrap().clone())),
+            Err(_) => None,
         }).collect()
     }
 }
@@ -28,7 +28,10 @@ pub struct MoveOnly<MoveGen: MoveGenerator + Component>(pub MoveGen);
 pub struct CaptureOnly<MoveGen: MoveGenerator + Component>(pub MoveGen);
 
 #[derive(Component)]
-pub struct CaptureMarker<MoveGen: MoveGenerator + Component, Marker: PieceMarker + Component>(pub MoveGen, pub PhantomData<Marker>);
+pub struct CapturesMarkers<MoveGen: MoveGenerator + Component, Marker: PieceMarker + Component>(pub MoveGen, pub PhantomData<Marker>);
+
+#[derive(Component, Default)]
+pub struct CapturesMarkersAlways<Marker: PieceMarker + Component>(pub PhantomData<Marker>);
 
 pub fn generate_moves<MoveGen: MoveGenerator + Component>(_event: On<GenerateMovesEvent>, mut commands: Commands, board: Single<&Board>,
     pieces: Query<(&PieceColor, &Position, &mut Moves, &MoveOnly<MoveGen>), With<Piece>>, piece_colors: Query<&PieceColor, With<Piece>>) {
@@ -56,12 +59,39 @@ pub fn generate_moves_and_captures<MoveGen: MoveGenerator + Component>(_event: O
 
 pub fn generate_marker_captures<MoveGen: MoveGenerator + Component, Marker: PieceMarker + Component + Copy>(_event: On<GenerateMovesEvent>, mut commands: Commands,
     board: Single<&Board>, marker_board: Single<&MarkerBoard>,
-    pieces: Query<(&PieceColor, &Position, &mut Moves, &CaptureMarker<MoveGen, Marker>), With<Piece>>, piece_colors: Query<&PieceColor, With<Piece>>,
+    pieces: Query<(&PieceColor, &Position, &mut Moves, &CapturesMarkers<MoveGen, Marker>), With<Piece>>, piece_colors: Query<&PieceColor, With<Piece>>,
     piece_positions: Query<&Position, With<Piece>>, markers: Query<(&Marker, &Position)>) {
 
-    
-    for (&color, &position, mut moves, CaptureMarker(move_gen, _)) in pieces {
+    for (&color, &position, mut moves, CapturesMarkers(move_gen, _)) in pieces {
         move_gen.generate_marker_captures(&mut commands, &mut moves, &board, position, color, piece_colors, MoveGen::get_marker_to_piece(&marker_board, markers, piece_positions));
+    }
+}
+
+pub fn generate_marker_captures_for_capture_only<MoveGen: MoveGenerator + Component, Marker: PieceMarker + Component + Copy>(_event: On<GenerateMovesEvent>, mut commands: Commands,
+    board: Single<&Board>, marker_board: Single<&MarkerBoard>,
+    pieces: Query<(&PieceColor, &Position, &mut Moves, &CaptureOnly<MoveGen>), (With<Piece>, With<CapturesMarkersAlways<Marker>>)>, piece_colors: Query<&PieceColor, With<Piece>>,
+    piece_positions: Query<&Position, With<Piece>>, markers: Query<(&Marker, &Position)>) {
+
+    for (&color, &position, mut moves, CaptureOnly(move_gen)) in pieces {
+        move_gen.generate_marker_captures(&mut commands, &mut moves, &board, position, color, piece_colors, MoveGen::get_marker_to_piece(&marker_board, markers, piece_positions));
+    }
+}
+
+pub fn generate_marker_captures_for_move_gen<MoveGen: MoveGenerator + Component, Marker: PieceMarker + Component + Copy>(_event: On<GenerateMovesEvent>, mut commands: Commands,
+    board: Single<&Board>, marker_board: Single<&MarkerBoard>,
+    pieces: Query<(&PieceColor, &Position, &mut Moves, &MoveGen), (With<Piece>, With<CapturesMarkersAlways<Marker>>)>, piece_colors: Query<&PieceColor, With<Piece>>,
+    piece_positions: Query<&Position, With<Piece>>, markers: Query<(&Marker, &Position)>) {
+
+    for (&color, &position, mut moves, move_gen) in pieces {
+        move_gen.generate_marker_captures(&mut commands, &mut moves, &board, position, color, piece_colors, MoveGen::get_marker_to_piece(&marker_board, markers, piece_positions));
+    }
+}
+
+macro_rules! register_marker {
+    ($app:ident,$move_generator:ty,$marker:ty) => {
+        $app.add_observer(crate::chess::moves::move_generator::generate_marker_captures::<$move_generator, $marker>)
+            .add_observer(crate::chess::moves::move_generator::generate_marker_captures_for_capture_only::<$move_generator, $marker>)
+            .add_observer(crate::chess::moves::move_generator::generate_marker_captures_for_move_gen::<$move_generator, $marker>)
     }
 }
 
@@ -73,11 +103,13 @@ macro_rules! move_generator_plugin {
             fn build(&self, app: &mut App) {
                 app.add_observer(crate::chess::moves::move_generator::generate_moves::<$move_generator>)
                     .add_observer(crate::chess::moves::move_generator::generate_captures::<$move_generator>)
-                    .add_observer(crate::chess::moves::move_generator::generate_moves_and_captures::<$move_generator>)
-                    .add_observer(crate::chess::moves::move_generator::generate_marker_captures::<$move_generator, crate::chess::moves::pawn_moves::EnPassantMarker>);
+                    .add_observer(crate::chess::moves::move_generator::generate_moves_and_captures::<$move_generator>);
+                crate::chess::moves::move_generator::register_marker!(app, $move_generator, crate::chess::markers::EnPassantMarker);
+                crate::chess::moves::move_generator::register_marker!(app, $move_generator, crate::chess::markers::CastleMarker);
             }
         }
     }
 }
 
+pub (crate) use register_marker;
 pub (crate) use move_generator_plugin;

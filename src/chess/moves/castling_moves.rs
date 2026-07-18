@@ -3,12 +3,12 @@ use bevy::prelude::*;
 use crate::chess::{board::Board, moves::moves::{GenerateMovesEvent, HasMoved, Move, MoveType, Moves, NormalMove}, piece::{Piece, PieceColor, SelectedPiece}, position::Position};
 
 #[derive(Component)]
-pub struct CastleTop;
+pub (crate) struct CastleTop;
 
 #[derive(Component)]
-pub struct CastleBottom;
+pub (crate) struct CastleBottom;
 
-pub fn generate_castling_moves(_event: On<GenerateMovesEvent>, mut commands: Commands, board: Single<&Board>,
+pub (crate) fn generate_castling_moves(_event: On<GenerateMovesEvent>, mut commands: Commands, board: Single<&Board>,
     mut castle_top: Single<(&PieceColor, &Position, &mut Moves), (With<Piece>, With<SelectedPiece>, With<CastleTop>, Without<HasMoved>)>,
     castle_bottoms: Query<(Entity, &PieceColor, &Position), (With<Piece>, With<CastleBottom>, Without<HasMoved>)>) {
 

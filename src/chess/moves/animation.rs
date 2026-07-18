@@ -3,20 +3,20 @@ use bevy::prelude::*;
 use crate::chess::{ChessState, moves::promotion::AttemptPromotionEvent, piece::PieceFollowsCursor, position::Position};
 
 #[derive(Component)]
-pub struct PieceAnimation {
-    pub start: Vec2,
-    pub end: Vec2,
-    pub progress: f32,
+pub (crate) struct PieceAnimation {
+    pub (crate) start: Vec2,
+    pub (crate) end: Vec2,
+    pub (crate) progress: f32,
 }
 
 impl PieceAnimation {
-    pub const SPEED: f32 = 4.0;
+    pub (crate) const SPEED: f32 = 4.0;
 }
 
 #[derive(Event)]
-pub struct PieceAnimationStartedEvent(pub Entity, pub Position, pub Position);
+pub (crate) struct PieceAnimationStartedEvent(pub (crate) Entity, pub (crate) Position, pub (crate) Position);
 
-pub fn on_piece_animation_started(event: On<PieceAnimationStartedEvent>, mut commands: Commands, mut next_state: ResMut<NextState<ChessState>>,
+pub (crate) fn on_piece_animation_started(event: On<PieceAnimationStartedEvent>, mut commands: Commands, mut next_state: ResMut<NextState<ChessState>>,
     cursor_followers: Query<(), With<PieceFollowsCursor>>) {
 
     let PieceAnimationStartedEvent(piece, from, to) = *event;
@@ -35,7 +35,7 @@ pub fn on_piece_animation_started(event: On<PieceAnimationStartedEvent>, mut com
     next_state.set(ChessState::PieceAnimation);
 }
 
-pub fn update_piece_animations(mut commands: Commands, mut next_state: ResMut<NextState<ChessState>>, time: Res<Time>, pieces: Query<(Entity, &mut PieceAnimation, &mut Transform)>) {
+pub (crate) fn update_piece_animations(mut commands: Commands, mut next_state: ResMut<NextState<ChessState>>, time: Res<Time>, pieces: Query<(Entity, &mut PieceAnimation, &mut Transform)>) {
     for (piece, mut animation, mut transform) in pieces {
         animation.progress += PieceAnimation::SPEED * time.delta_secs();
         animation.progress = animation.progress.clamp(0.0, 1.0);
