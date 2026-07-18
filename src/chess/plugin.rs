@@ -1,12 +1,12 @@
 use bevy::prelude::*;
 
-use crate::chess::{ChessState, board::{check_board_clicked, on_board_pressed, on_board_released, restore_board}, moves::{animation::{on_piece_animation_started, update_piece_animations}, castling_moves::generate_castling_moves, checks::check_illegal_moves, moves::{on_move_fully_ended, on_piece_moved}, pawn_moves::generate_pawn_moves, plugin::MovesPlugin, promotion::{attempt_promotion, check_promotion_option_clicked}}, piece::{on_piece_deselected, on_piece_selected, piece_follow_cursor, start_following_cursor, stop_following_cursor}, position::{on_sync_transform_with_position, sync_transform_with_position}, setup::{spawn_board, sync_pieces_with_board}};
+use crate::chess::{ChessState, board::{check_board_clicked, on_board_pressed, on_board_released, restore_board}, markers::MarkerVisibilityPlugin, moves::{animation::{on_piece_animation_started, update_piece_animations}, castling_moves::generate_castling_moves, checks::check_illegal_moves, moves::{on_move_fully_ended, on_piece_moved}, pawn_moves::generate_pawn_moves, plugin::MovesPlugin, promotion::{attempt_promotion, check_promotion_option_clicked}}, piece::{on_piece_deselected, on_piece_selected, piece_follow_cursor, start_following_cursor, stop_following_cursor}, position::{on_sync_transform_with_position, sync_transform_with_position}, setup::{spawn_board, sync_pieces_with_board}};
 
 pub struct ChessPlugin;
 
 impl Plugin for ChessPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(MovesPlugin)
+        app.add_plugins((MarkerVisibilityPlugin, MovesPlugin))
             .add_sub_state::<ChessState>()
             .add_systems(Startup, (spawn_board, sync_pieces_with_board).chain())
             .add_systems(Update, ((

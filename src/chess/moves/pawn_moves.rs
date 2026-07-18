@@ -6,7 +6,7 @@ use crate::chess::{board::Board, direction::Direction, markers::{PieceMarker, Pi
 pub struct DoublePawnMoveGenerator(pub Direction);
 
 #[derive(Component, Clone, Copy)]
-#[require(PieceMarkerRequire)]
+#[require(PieceMarkerRequire { sprite_name: "en_passant_marker.png" })]
 pub struct EnPassantMarker(pub Entity);
 
 impl PieceMarker for EnPassantMarker {

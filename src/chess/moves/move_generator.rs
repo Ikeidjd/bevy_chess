@@ -14,9 +14,9 @@ pub trait MoveGenerator {
     fn get_marker_to_piece<Marker: PieceMarker + Component + Copy, F: QueryFilter>(marker_board: &MarkerBoard, markers: Query<(&Marker, &Position), F>,
         piece_positions: Query<&Position, With<Piece>>) -> HashMap<Position, Position> {
 
-        marker_board.current.iter().filter_map(|&marker_entity| match markers.get(marker_entity) {
-            Ok((&marker, &position)) => Some((position, piece_positions.get(marker.get_entity()).unwrap().clone())),
-            Err(_) => None,
+        marker_board.current.iter().map(|&marker_entity| match markers.get(marker_entity) {
+            Ok((&marker, &position)) => (position, piece_positions.get(marker.get_entity()).unwrap().clone()),
+            Err(_) => unreachable!(),
         }).collect()
     }
 }
