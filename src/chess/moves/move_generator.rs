@@ -111,5 +111,5 @@ macro_rules! move_generator_plugin {
     }
 }
 
-pub (crate) (crate) use register_marker;
-pub (crate) (crate) use move_generator_plugin;
+pub (crate) use register_marker;
+pub (crate) use move_generator_plugin;
