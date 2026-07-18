@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::chess::{board::Board, direction::Direction, moves::{move_generator::{PieceMarker, PieceMarkerRequire}, moves::{GenerateMovesEvent, HasMoved, Move, MoveType, Moves, NormalMove}}, piece::Piece, position::Position};
+use crate::chess::{board::Board, direction::Direction, markers::{PieceMarker, PieceMarkerRequire}, moves::moves::{GenerateMovesEvent, HasMoved, Move, MoveType, Moves, NormalMove}, piece::Piece, position::Position};
 
 #[derive(Component, Clone, Copy)]
 pub struct DoublePawnMoveGenerator(pub Direction);

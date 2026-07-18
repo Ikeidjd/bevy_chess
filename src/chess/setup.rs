@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{chess::{BOARD_LENGTH, board::{Board, BoardChanges}, piece::{EmptyPiece, Piece, PieceColor}, position::Position, preset_pieces::{bishop, black_pawn, king, knight, queen, rook, white_pawn}}, layers};
+use crate::{chess::{BOARD_LENGTH, board::{Board, BoardChanges}, markers::MarkerBoard, piece::{EmptyPiece, Piece, PieceColor}, position::Position, preset_pieces::{bishop, black_pawn, king, knight, queen, rook, white_pawn}}, layers};
 
 pub fn spawn_piece(commands: &mut Commands, asset_server: &AssetServer, color: PieceColor, position: Position, texture_path: impl ToString, extra: impl Bundle) -> Entity {
     let mut piece = commands.spawn((
@@ -47,6 +47,8 @@ pub fn spawn_board(mut commands: Commands, asset_server: Res<AssetServer>) {
         BoardChanges::default(),
         Sprite::from_image(asset_server.load("board.png")),
     )).add_children(&pieces);
+
+    commands.spawn(MarkerBoard::default());
 }
 
 pub fn sync_pieces_with_board(pieces: Query<(Entity, &Position), With<Piece>>, mut board: Single<&mut Board>) {

@@ -1,6 +1,6 @@
 use bevy::{platform::collections::HashMap, prelude::*};
 
-use crate::{chess::{board::{Board, BoardChanges}, moves::{animation::PieceAnimationStartedEvent, move_generator::PieceMarkerRequire, pawn_moves::EnPassantMarker}, piece::{Piece, PieceDeselectedEvent}, position::Position}, layers};
+use crate::{chess::{board::{Board, BoardChanges}, markers::MarkerBoard, moves::{animation::PieceAnimationStartedEvent, pawn_moves::EnPassantMarker}, piece::{Piece, PieceDeselectedEvent}, position::Position}, layers};
 
 #[derive(Component, Clone)]
 pub struct Moves {
@@ -108,8 +108,10 @@ impl PieceMovedEvent {
 #[derive(Event)]
 pub struct MoveFullyEndedEvent;
 
-pub fn on_piece_moved(event: On<PieceMovedEvent>, mut commands: Commands, mut board: Single<(Entity, &mut Board, &mut BoardChanges)>, pieces: Query<Entity, With<Piece>>) {
-    let (board_entity, ref mut board, ref mut board_changes) = *board;
+pub fn on_piece_moved(event: On<PieceMovedEvent>, mut commands: Commands, mut board: Single<(&mut Board, &mut BoardChanges)>, mut marker_board: Single<&mut MarkerBoard>,
+    pieces: Query<Entity, With<Piece>>) {
+
+    let (ref mut board, ref mut board_changes) = *board;
 
     match event.mmove.move_type {
         MoveType::Normal(NormalMove { from, to }) => {
@@ -123,12 +125,14 @@ pub fn on_piece_moved(event: On<PieceMovedEvent>, mut commands: Commands, mut bo
         MoveType::DoublePawn(normal_move) => {
             let NormalMove { from, to } = normal_move;
 
+            let marker_position = Position::new((from.rank + to.rank) / 2, (from.file + to.file) / 2);
+
             let marker = commands.spawn((
                 EnPassantMarker(board[from]),
-                Position::new((from.rank + to.rank) / 2, (from.file + to.file) / 2),
+                marker_position,
             )).id();
 
-            commands.entity(board_entity).add_child(marker);
+            marker_board.insert(marker);
 
             let mmove = Move {
                 move_type: MoveType::Normal(normal_move),
@@ -156,13 +160,7 @@ pub fn on_piece_moved(event: On<PieceMovedEvent>, mut commands: Commands, mut bo
     commands.trigger(PieceDeselectedEvent);
 }
 
-pub fn on_move_fully_ended(_event: On<MoveFullyEndedEvent>, mut commands: Commands, mut board_changes: Single<&mut BoardChanges, With<Board>>, markers: Query<(Entity, &mut PieceMarkerRequire)>) {
-    board_changes.clear(&mut commands);
-
-    for (entity, mut marker) in markers {
-        match marker.old {
-            true => commands.entity(entity).despawn(),
-            false => marker.old = true,
-        }
-    }
+pub fn on_move_fully_ended(_event: On<MoveFullyEndedEvent>, mut board_changes: Single<&mut BoardChanges, With<Board>>, mut marker_board: Single<&mut MarkerBoard, Without<Board>>) {
+    board_changes.clear();
+    marker_board.advance_move();
 }

@@ -9,6 +9,7 @@ mod preset_pieces;
 mod setup;
 mod board;
 mod piece;
+mod markers;
 mod moves;
 
 pub const PIECE_SIZE: f32 = 48.0;

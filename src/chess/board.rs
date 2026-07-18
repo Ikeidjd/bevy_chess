@@ -1,8 +1,8 @@
-use std::ops::{Index, IndexMut};
+use std::ops::{Deref, DerefMut, Index, IndexMut};
 
 use bevy::{ecs::query::QueryFilter, prelude::*};
 
-use crate::{CursorWorldCoordinates, chess::{BOARD_LENGTH, moves::{move_generator::PieceMarkerRequire, moves::{HasMoved, Moves, PieceMovedEvent}}, piece::{Piece, PieceColor, PieceDeselectedEvent, PieceSelectedEvent, SelectedPiece, StopFollowingCursorEvent}, position::Position}};
+use crate::{CursorWorldCoordinates, chess::{BOARD_LENGTH, markers::MarkerBoard, moves::moves::{HasMoved, Moves, PieceMovedEvent}, piece::{Piece, PieceColor, PieceDeselectedEvent, PieceSelectedEvent, SelectedPiece, StopFollowingCursorEvent}, position::Position}};
 
 #[derive(Component, Clone)]
 pub struct Board {
@@ -18,39 +18,43 @@ impl Board {
         }
     }
 
-    pub fn do_move(&mut self, commands: &mut Commands, board_changes: &mut BoardChanges, piece: Entity, from: Position, to: Position, capture: Option<Position>, is_real: bool) {
-        board_changes.changes.push((from, self[from]));
-        board_changes.changes.push((to, self[to]));
+    pub fn insert(&mut self, commands: &mut Commands, board: Entity, board_changes: &mut BoardChanges, entity: Entity, position: Position) {
+        commands.entity(board).add_child(entity);
+        board_changes.push((position, self[position]));
+        self[position] = entity;
+    }
+
+    pub fn do_move(&mut self, commands: &mut Commands, board_changes: &mut BoardChanges, entity: Entity, from: Position, to: Position, capture: Option<Position>, is_real: bool) {
+        board_changes.push((from, self[from]));
+        board_changes.push((to, self[to]));
 
         if !self.is_empty(to) {
-            board_changes.to_despawn.push(self[to]);
             commands.entity(self[to]).insert((Captured, Visibility::Hidden));
         }
 
-        if let Some(capture) = capture {
-            board_changes.changes.push((capture, self[capture]));
-            board_changes.to_despawn.push(self[capture]);
+        if let Some(capture) = capture && capture != to {
+            board_changes.push((capture, self[capture]));
             commands.entity(self[capture]).insert((Captured, Visibility::Hidden));
             self[capture] = self.empty_piece;
         }
 
-        self[to] = piece;
+        self[to] = entity;
         self[from] = self.empty_piece;
 
-        commands.entity(piece).insert(to);
+        commands.entity(entity).insert(to);
 
         if is_real {
-            commands.entity(piece).insert(HasMoved);
+            commands.entity(entity).insert(HasMoved);
         }
     }
 
     pub fn restore_changes(&mut self, commands: &mut Commands, board_changes: &mut BoardChanges) {
-        let BoardChanges { changes, .. } = std::mem::take(board_changes);
-
-        for (position, piece) in changes.into_iter().rev() {
+        for &(position, piece) in board_changes.iter().rev() {
             self[position] = piece;
             commands.entity(piece).insert((position, Visibility::Visible)).remove::<Captured>();
         }
+
+        board_changes.clear();
     }
 
     pub fn is_in_bounds(&self, position: Position) -> bool {
@@ -84,18 +88,19 @@ impl IndexMut<Position> for Board {
 }
 
 #[derive(Component, Default)]
-pub struct BoardChanges {
-    pub changes: Vec<(Position, Entity)>,
-    pub to_despawn: Vec<Entity>,
+pub struct BoardChanges(Vec<(Position, Entity)>);
+
+impl Deref for BoardChanges {
+    type Target = Vec<(Position, Entity)>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
-impl BoardChanges {
-    pub fn clear(&mut self, commands: &mut Commands) {
-        let Self { to_despawn, .. } = std::mem::take(self);
-
-        for piece in to_despawn {
-            commands.entity(piece).despawn();
-        }
+impl DerefMut for BoardChanges {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
@@ -145,14 +150,9 @@ pub fn on_board_released(event: On<BoardReleasedEvent>, mut commands: Commands, 
     }
 }
 
-pub fn restore_board(_event: On<RestoreBoardEvent>, mut commands: Commands, mut board: Single<(&mut Board, &mut BoardChanges)>, markers: Query<(Entity, &mut PieceMarkerRequire)>) {
+pub fn restore_board(_event: On<RestoreBoardEvent>, mut commands: Commands, mut board: Single<(&mut Board, &mut BoardChanges)>, mut marker_board: Single<&mut MarkerBoard, Without<Board>>) {
     let (ref mut board, ref mut board_changes) = *board;
     board.restore_changes(&mut commands, board_changes);
 
-    for (entity, mut marker) in markers {
-        match marker.old {
-            true => marker.old = false,
-            false => commands.entity(entity).despawn(),
-        }
-    }
+    marker_board.remove_future_markers();
 }
